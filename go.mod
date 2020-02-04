@@ -12,7 +12,6 @@ require (
 	github.com/google/gofuzz v1.0.0 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
 	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80 // indirect
 	github.com/voxelbrain/goptions v0.0.0-20180630082107-58cddc247ea2 // indirect
@@ -22,13 +21,12 @@ require (
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45 // indirect
 	golang.org/x/sys v0.0.0-20190515120540-06a5c4944438 // indirect
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
-	k8s.io/api v0.17.0
+	k8s.io/api v0.0.0
 	k8s.io/apiextensions-apiserver v0.0.0 // indirect
-	k8s.io/apimachinery v0.17.0
-	k8s.io/client-go v11.0.0+incompatible
-	k8s.io/klog v0.3.3 // indirect
+	k8s.io/apimachinery v0.0.0
+	k8s.io/client-go v0.0.0
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d // indirect
-	sigs.k8s.io/controller-runtime v0.4.0
+	sigs.k8s.io/controller-runtime v0.3.0
 )
 
 // Pinned to kubernetes-1.15.4
