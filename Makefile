@@ -1,6 +1,6 @@
 export GOFLAGS=-mod=vendor
 export GO111MODULE=on
-export GOBIN=~/go/bin
+export GOBIN=$(HOME)/go/bin
 
 GOVERSION=$(shell hack/go-version.sh)
 GO ?= $(GOBIN)/go$(GOVERSION)
@@ -38,7 +38,7 @@ vendor:
 	$(GO) mod tidy
 	$(GO) mod vendor
 
-release:
+release: $(GITHUB_RELEASE)
 	hack/release.sh
 
 .PHONY: \
