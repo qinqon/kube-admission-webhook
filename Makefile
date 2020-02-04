@@ -14,22 +14,13 @@ $(GITHUB_RELEASE): $(GO)
 $(GO):
 	hack/install-go.sh $(GOVERSION)
 
-format: whitespace-format gofmt
+format:
+	hack/whitespace.sh format
+	$(GO) fmt ./pkg/...
+	test -z "`$(GOFMT) -l pkg/ `" || ($(GOFMT) -l pkg/ && exit 1)
 
 vet: $(GO)
 	$(GO) vet ./pkg/...
-
-whitespace-format:
-	hack/whitespace.sh format
-
-gofmt: $(GO)
-	$(GO) fmt ./pkg/...
-
-whitespace-check:
-	hack/whitespace.sh check
-
-gofmt-check: $(GO)
-	test -z "`$(GOFMT) -l pkg/ `" || ($(GOFMT) -l pkg/ && exit 1)
 
 test: $(GO) vet format
 	$(GO) test ./pkg/...
@@ -38,9 +29,22 @@ vendor:
 	$(GO) mod tidy
 	$(GO) mod vendor
 
+prepare-patch:
+	./hack/prepare-release.sh patch
+prepare-minor:
+	./hack/prepare-release.sh minor
+prepare-major:
+	./hack/prepare-release.sh major
+
 release: $(GITHUB_RELEASE)
 	hack/release.sh
 
 .PHONY: \
 	test \
-	vendor
+	vendor \
+	release \
+	prepare-patch \
+	prepare-minor \
+	prepare-major \
+	format \
+	vet
