@@ -1,7 +1,10 @@
 #!/bin/bash -xe
 
+destination=$1
 version=$(grep "^go " go.mod |awk '{print $2}')
+tarball=go$version.linux-amd64.tar.gz
+url=https://dl.google.com/go/
 
-unset GOFLAGS
-go get golang.org/dl/go$version
-go$version download
+mkdir -p $destination
+curl -L $url/$tarball -o $destination/$tarball
+tar -xf $destination/$tarball -C $destination

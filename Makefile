@@ -1,9 +1,16 @@
+SHELL := /bin/bash
+
+BIN_DIR = $(CURDIR)/build/_output/bin/
+
 export GOFLAGS=-mod=vendor
 export GO111MODULE=on
-export GOBIN=$(HOME)/go/bin
+export GOROOT=$(BIN_DIR)/go/
+export GOBIN=$(GOROOT)/bin/
+export PATH := $(GOROOT)/bin:$(PATH)
 
-GOVERSION=$(shell hack/go-version.sh)
-GO ?= $(GOBIN)/go$(GOVERSION)
+GO ?= $(GOBIN)/go
+GOFMT ?= $(GOBIN)/gofmt
+
 export GITHUB_RELEASE := $(GOBIN)/github-release
 
 all: test
@@ -12,12 +19,13 @@ $(GITHUB_RELEASE): $(GO)
 	$(GO) install ./vendor/github.com/aktau/github-release
 
 $(GO):
-	hack/install-go.sh $(GOVERSION)
+	hack/install-go.sh $(BIN_DIR)
 
-format:
+$(GOFMT): $(GO)
+
+format: $(FMT)
 	hack/whitespace.sh format
-	$(GO) fmt ./pkg/...
-	test -z "`$(GOFMT) -l pkg/ `" || ($(GOFMT) -l pkg/ && exit 1)
+	$(GOFMT) -w ./pkg
 
 vet: $(GO)
 	$(GO) vet ./pkg/...
