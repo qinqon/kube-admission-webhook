@@ -1,3 +1,12 @@
-v0.1.0
+v0.3.0
 
-This is the initial release, it des not contain unit test yet.
+Added new UpdateOpts call to Server so new hooks can 
+be added after instanciation.
+
+
+Features:
+* add api to modify server outside of New method
+
+Bugs:
+* Install golang from tarball
+
