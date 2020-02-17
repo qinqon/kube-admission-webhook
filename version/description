@@ -1,6 +1,6 @@
 v0.3.0
 
-Added new UpdateOpts call to Server so new hooks can 
+Added new UpdateOpts call to Server so new hooks can
 be added after instanciation.
 
 
