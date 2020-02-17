@@ -1,12 +1,7 @@
-v0.3.0
+v0.4.0
 
-Added new UpdateOpts call to Server so new hooks can
-be added after instanciation.
+controller-runtime upgraded to 0.4.0 and golang 1.13
 
 
 Features:
-* add api to modify server outside of New method
-
-Bugs:
-* Install golang from tarball
-
+* Upgrade controller-runtime to 0.4.0
