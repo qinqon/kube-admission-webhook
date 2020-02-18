@@ -11,9 +11,24 @@ export PATH := $(GOROOT)/bin:$(PATH)
 GO ?= $(GOBIN)/go
 GOFMT ?= $(GOBIN)/gofmt
 
+KUBEVIRT_PROVIDER=kind-k8s-1.14.2
+
+CLUSTER_DIR ?= kubevirtci/cluster-up/
+KUBECONFIG ?= kubevirtci/_ci-configs/$(KUBEVIRT_PROVIDER)/.kubeconfig
+export KUBECTL ?= $(CLUSTER_DIR)/kubectl.sh
+CLUSTER_UP ?= $(CLUSTER_DIR)/up.sh
+CLUSTER_DOWN ?= $(CLUSTER_DIR)/down.sh
+CLI ?= $(CLUSTER_DIR)/cli.sh
+export SSH ?= $(CLUSTER_DIR)/ssh.sh
+
 export GITHUB_RELEASE := $(GOBIN)/github-release
 
+install_kubevirtci := hack/install-kubevirtci.sh
+
 all: test
+
+$(CLUSTER_DIR)/%: $(install_kubevirtci)
+	$(install_kubevirtci)
 
 $(GITHUB_RELEASE): $(GO)
 	$(GO) install ./vendor/github.com/aktau/github-release
@@ -33,9 +48,18 @@ vet: $(GO)
 test: $(GO) vet format
 	$(GO) test ./pkg/...
 
+pod:
+	$(GO) build -o $(BIN_DIR) ./pkg/... ./test/pod
+
 vendor:
 	$(GO) mod tidy
 	$(GO) mod vendor
+
+cluster-up: $(CLUSTER_UP)
+	$(CLUSTER_UP)
+
+cluster-down: $(CLUSTER_DOWN)
+	$(CLUSTER_DOWN)
 
 prepare-patch:
 	./hack/prepare-release.sh patch
