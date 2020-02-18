@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qinqon
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-admission-webhook
+  namespace: qinqon
+spec:
+  containers:
+  - name: kube-admission-webhook
+    image: registry:5000/qinqon/kube-admission-webhook
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-admission-webhook
+  namespace: qinqon
+  labels:
+    app: kube-admission-webhook
+spec:
+  publishNotReadyAddresses: true
+  ports:
+    - port: 443
+      targetPort: 8443
+  selector:
+    name: kube-admission-webhook
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: kube-admission-webhook
+  labels:
+    app: kube-admission-webhook
+webhooks:
+  - name: mutate-v1-pod.nmstate.io
+    clientConfig:
+      service:
+        name: kube-admission-webhook
+        namespace: qinqon
+        path: "/mutate-v1-pod"
+    rules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pod"]
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: kube-admission-webhook
+  labels:
+    app: kube-admission-webhook
+webhooks:
+  - name: validate-v1-pod.nmstate.io
+    clientConfig:
+      service:
+        name: kube-admission-webhook
+        namespace: qinqon
+        path: "/validate-v1-pod"
+    rules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pod"]

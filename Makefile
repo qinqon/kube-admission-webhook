@@ -11,9 +11,22 @@ export PATH := $(GOROOT)/bin:$(PATH)
 GO ?= $(GOBIN)/go
 GOFMT ?= $(GOBIN)/gofmt
 
+KUBEVIRT_PROVIDER=kind-k8s-1.14.2
+POD_IMAGE_NAME ?= localhost:5000/qinqon/kube-admission-webhook
+
+CLUSTER_DIR ?= kubevirtci/cluster-up/
+KUBECTL ?= $(CLUSTER_DIR)/kubectl.sh
+CLUSTER_UP ?= $(CLUSTER_DIR)/up.sh
+CLUSTER_DOWN ?= $(CLUSTER_DIR)/down.sh
+
 export GITHUB_RELEASE := $(GOBIN)/github-release
 
+install_kubevirtci := hack/install-kubevirtci.sh
+
 all: test
+
+$(CLUSTER_DIR)/%: $(install_kubevirtci)
+	$(install_kubevirtci)
 
 $(GITHUB_RELEASE): $(GO)
 	$(GO) install ./vendor/github.com/aktau/github-release
@@ -33,9 +46,26 @@ vet: $(GO)
 test: $(GO) vet format
 	$(GO) test ./pkg/...
 
+pod: $(GO)
+	$(GO) build -o $(BIN_DIR) ./pkg/... ./test/pod
+	docker build . -f test/pod/Dockerfile -t $(POD_IMAGE_NAME)
+
+push: pod
+	docker push $(POD_IMAGE_NAME)
+
 vendor:
 	$(GO) mod tidy
 	$(GO) mod vendor
+
+cluster-up: $(CLUSTER_UP)
+	$(CLUSTER_UP)
+
+cluster-down: $(CLUSTER_DOWN)
+	$(CLUSTER_DOWN)
+
+cluster-sync: push
+	$(KUBECTL) delete --ignore-not-found=true -f test/pod
+	$(KUBECTL) apply -f test/pod
 
 prepare-patch:
 	./hack/prepare-release.sh patch

@@ -1,0 +1,3 @@
+kubevirtci
+build/**/go1*
+build/**/go
