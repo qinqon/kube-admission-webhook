@@ -1,7 +1,8 @@
-v0.4.0
+v0.5.0
 
-controller-runtime upgraded to 0.4.0 and golang 1.13
+Fix a race between runtime-controller client cache start and webhook retrieving
+cluster auth config.
 
+Bugs:
+* Retry if runtime-controller cache is not started yet
 
-Features:
-* Upgrade controller-runtime to 0.4.0
