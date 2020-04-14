@@ -1,6 +1,8 @@
 package server
 
 import (
+	"os"
+
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 
@@ -88,18 +90,21 @@ func (s *Server) updateServerOpts(serverOpts ...ServerModifier) {
 func (s *Server) Start(stop <-chan struct{}) error {
 	s.log.Info("Starting nodenetworkconfigurationpolicy webhook server")
 
-	certManager, err := certificate.NewManager(s.mgr, s.webhookName, s.webhookType, s.webhookServer.CertDir, "tls.crt", "tls.key", s.caConfigMapKey, s.caConfigMapField)
-	if err != nil {
-		return errors.Wrap(err, "failed creating new webhook cert manager")
+	if _, err := os.Stat(s.webhookServer.CertDir); os.IsNotExist(err) {
+		s.log.Info("Starting certificate manager")
+		certManager, err := certificate.NewManager(s.mgr, s.webhookName, s.webhookType, s.webhookServer.CertDir, "tls.crt", "tls.key", s.caConfigMapKey, s.caConfigMapField)
+		if err != nil {
+			return errors.Wrap(err, "failed creating new webhook cert manager")
+		}
+
+		err = certManager.Start()
+		if err != nil {
+			return errors.Wrap(err, "failed starting webhook cert manager")
+		}
+		defer certManager.Stop()
 	}
 
-	err = certManager.Start()
-	if err != nil {
-		return errors.Wrap(err, "failed starting webhook cert manager")
-	}
-	defer certManager.Stop()
-
-	err = s.webhookServer.Start(stop)
+	err := s.webhookServer.Start(stop)
 	if err != nil {
 		return errors.Wrap(err, "failed starting webhook server")
 	}
