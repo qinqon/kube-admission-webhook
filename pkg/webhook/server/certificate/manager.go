@@ -13,7 +13,6 @@ import (
 
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	certificatesclientv1beta1 "k8s.io/client-go/kubernetes/typed/certificates/v1beta1"
 	"k8s.io/client-go/util/certificate"
@@ -22,12 +21,11 @@ import (
 )
 
 type manager struct {
-	crMgr            crmanager.Manager
-	certManager      certificate.Manager
-	certStore        *filePairStore
-	log              logr.Logger
-	caConfigMapKey   types.NamespacedName
-	caConfigMapField string
+	crMgr       crmanager.Manager
+	certManager certificate.Manager
+	certStore   *filePairStore
+	log         logr.Logger
+	caCertPath  string
 }
 
 type WebhookType string
@@ -58,7 +56,7 @@ func NewManager(
 	crMgr crmanager.Manager,
 	webhookName string,
 	webhookType WebhookType,
-	certDir string, certFileName string, keyFileName string, caConfigMapKey types.NamespacedName, caConfigMapField string) (*manager, error) {
+	certDir string, certFileName string, keyFileName string, caCertPath string) (*manager, error) {
 
 	certStore, err := NewFilePairStore(
 		certDir,
@@ -70,11 +68,10 @@ func NewManager(
 	}
 
 	m := &manager{
-		crMgr:            crMgr,
-		log:              logf.Log.WithName("webhook/server/certificate/manager"),
-		certStore:        certStore,
-		caConfigMapKey:   caConfigMapKey,
-		caConfigMapField: caConfigMapField,
+		crMgr:      crMgr,
+		log:        logf.Log.WithName("webhook/server/certificate/manager"),
+		certStore:  certStore,
+		caCertPath: caCertPath,
 	}
 
 	dnsNames := []string{}

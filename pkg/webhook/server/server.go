@@ -4,7 +4,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -14,13 +13,12 @@ import (
 )
 
 type Server struct {
-	mgr              manager.Manager
-	webhookName      string
-	webhookType      certificate.WebhookType
-	webhookServer    *webhook.Server
-	caConfigMapKey   types.NamespacedName
-	caConfigMapField string
-	log              logr.Logger
+	mgr           manager.Manager
+	webhookName   string
+	webhookType   certificate.WebhookType
+	webhookServer *webhook.Server
+	caCertPath    string
+	log           logr.Logger
 }
 
 type ServerModifier func(w *Server)
@@ -35,13 +33,9 @@ func New(mgr manager.Manager, webhookName string, webhookType certificate.Webhoo
 			Port:    8443,
 			CertDir: "/etc/webhook/certs/",
 		},
-		caConfigMapKey: types.NamespacedName{
-			Namespace: "kube-system",
-			Name:      "extension-apiserver-authentication",
-		},
-		caConfigMapField: "client-ca-file",
-		mgr:              mgr,
-		log:              logf.Log.WithName("webhook/server"),
+		caCertPath: "/etc/webhook/ca/client-ca-file",
+		mgr:        mgr,
+		log:        logf.Log.WithName("webhook/server"),
 	}
 	s.updateServerOpts(serverOpts...)
 
@@ -66,15 +60,9 @@ func WithCertDir(certDir string) ServerModifier {
 	}
 }
 
-func WithCaConfigMapKey(key types.NamespacedName) ServerModifier {
+func WithCaCertPath(caCertPath string) ServerModifier {
 	return func(s *Server) {
-		s.caConfigMapKey = key
-	}
-}
-
-func WithCaConfigMapField(field string) ServerModifier {
-	return func(s *Server) {
-		s.caConfigMapField = field
+		s.caCertPath = caCertPath
 	}
 }
 
@@ -88,7 +76,7 @@ func (s *Server) updateServerOpts(serverOpts ...ServerModifier) {
 func (s *Server) Start(stop <-chan struct{}) error {
 	s.log.Info("Starting nodenetworkconfigurationpolicy webhook server")
 
-	certManager, err := certificate.NewManager(s.mgr, s.webhookName, s.webhookType, s.webhookServer.CertDir, "tls.crt", "tls.key", s.caConfigMapKey, s.caConfigMapField)
+	certManager, err := certificate.NewManager(s.mgr, s.webhookName, s.webhookType, s.webhookServer.CertDir, "tls.crt", "tls.key", s.caCertPath)
 	if err != nil {
 		return errors.Wrap(err, "failed creating new webhook cert manager")
 	}

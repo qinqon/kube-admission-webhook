@@ -3,12 +3,12 @@ package certificate
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"time"
 
 	"github.com/pkg/errors"
 
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,14 +34,11 @@ func (m manager) get(key types.NamespacedName, value runtime.Object) error {
 
 // Retrieve cluster CA bundle and encode to base 64
 func (m manager) clientCAFile() ([]byte, error) {
-	authenticationConfig := corev1.ConfigMap{}
-	err := m.get(m.caConfigMapKey, &authenticationConfig)
+	caCert, err := ioutil.ReadFile(m.caCertPath)
 	if err != nil {
-		return []byte{}, errors.Wrap(err, "failed to retrieve cluster authentication config")
+		return []byte{}, errors.Wrapf(err, "failed to read ca certificate %s", m.caCertPath)
 	}
-
-	clientCaFile := authenticationConfig.Data[m.caConfigMapField]
-	return []byte(clientCaFile), nil
+	return caCert, nil
 }
 
 func mutatingWebhookConfig(webhook runtime.Object) *admissionregistrationv1beta1.MutatingWebhookConfiguration {
