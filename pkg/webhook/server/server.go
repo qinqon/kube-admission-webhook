@@ -23,8 +23,6 @@ type Server struct {
 	log              logr.Logger
 }
 
-type ServerModifier func(w *Server)
-
 // Add creates a new Conditions Mutating Webhook and adds it to the Manager. The Manager will set fields on the Webhook
 // and Start it when the Manager is Started.
 func New(mgr manager.Manager, webhookName string, webhookType certificate.WebhookType, serverOpts ...ServerModifier) *Server {
@@ -35,47 +33,21 @@ func New(mgr manager.Manager, webhookName string, webhookType certificate.Webhoo
 			Port:    8443,
 			CertDir: "/etc/webhook/certs/",
 		},
-		caConfigMapKey: types.NamespacedName{
-			Namespace: "kube-system",
-			Name:      "extension-apiserver-authentication",
-		},
-		caConfigMapField: "client-ca-file",
-		mgr:              mgr,
-		log:              logf.Log.WithName("webhook/server"),
+		mgr: mgr,
+		log: logf.Log.WithName("webhook/server"),
 	}
+
+	// Use k8s cacert configmap by default
+	WithK8SCACert()(s)
+
 	s.updateServerOpts(serverOpts...)
 
 	return s
 }
 
-func WithHook(path string, hook *webhook.Admission) ServerModifier {
-	return func(s *Server) {
-		s.webhookServer.Register(path, hook)
-	}
-}
-
-func WithPort(port int) ServerModifier {
-	return func(s *Server) {
-		s.webhookServer.Port = port
-	}
-}
-
-func WithCertDir(certDir string) ServerModifier {
-	return func(s *Server) {
-		s.webhookServer.CertDir = certDir
-	}
-}
-
-func WithCaConfigMapKey(key types.NamespacedName) ServerModifier {
-	return func(s *Server) {
-		s.caConfigMapKey = key
-	}
-}
-
-func WithCaConfigMapField(field string) ServerModifier {
-	return func(s *Server) {
-		s.caConfigMapField = field
-	}
+func NewWithAutoCACert(mgr manager.Manager, webhookName string, webhookType certificate.WebhookType, serverOpts ...ServerModifier) *Server {
+	serverOpts = append(serverOpts, WithAutoCACert())
+	return New(mgr, webhookName, webhookType, serverOpts...)
 }
 
 //updates Server parameters using ServerModifier functions. Once the manager is started these parameters cannot be updated
