@@ -59,8 +59,8 @@ func main() {
 
 	// Setup webhooks
 	entryLog.Info("setting up webhook server")
-	mutatingWebhookServer := webhookserver.New(mgr, "test-webhook", certificate.MutatingWebhook)
-	validatingWebhookServer := webhookserver.New(mgr, "test-webhook", certificate.ValidatingWebhook)
+	mutatingWebhookServer := webhookserver.New(mgr.GetClient(), "test-webhook", certificate.MutatingWebhook)
+	validatingWebhookServer := webhookserver.New(mgr.GetClient(), "test-webhook", certificate.ValidatingWebhook)
 
 	entryLog.Info("registering webhooks to the webhook server")
 	mutatingWebhookServer.UpdateOpts(webhookserver.WithHook("/mutate-v1-pod", &webhook.Admission{Handler: &podAnnotator{Client: mgr.GetClient()}}))

@@ -1,6 +1,7 @@
 package certificate
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"io/ioutil"
@@ -13,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -54,7 +56,7 @@ func TestSetRotationDeadline(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := manager{
+			m := Manager{
 				caKeyPair: &triple.KeyPair{
 					Cert: &x509.Certificate{
 						NotBefore: tc.notBefore,
@@ -80,7 +82,7 @@ func TestSetRotationDeadline(t *testing.T) {
 	}
 }
 
-func TestReadiness(t *testing.T) {
+func TestWaitForDeadlineAndRotate(t *testing.T) {
 
 	certDir, err := ioutil.TempDir("/tmp/", "manager-test-certs")
 	if err != nil {
@@ -108,18 +110,11 @@ func TestReadiness(t *testing.T) {
 	objs := []runtime.Object{mutatingWebhookConfiguration}
 
 	client := fake.NewFakeClient(objs...)
-
-	manager := NewManager(client, "fooWebhook", MutatingWebhook)
-	err = manager.Start()
-	if err != nil {
-		t.Fatalf("failed running manager Start: (%v)", err)
-	}
-	defer manager.Stop()
-
-	err = manager.WaitForReadiness()
-	if err != nil {
-		t.Fatalf("failed watting for readiness: (%v)", err)
-	}
+	certsDuration := time.Minute
+	manager := NewManager(client, "fooWebhook", MutatingWebhook, certsDuration)
+	manager.waitForDeadlineAndRotate()
+	//TODO Implement ErrorsHandler to take the errors that we have at
+	//     background
 
 	err = client.Get(context.TODO(), types.NamespacedName{Name: "fooWebhook"}, mutatingWebhookConfiguration)
 	if err != nil {
@@ -144,4 +139,43 @@ func TestReadiness(t *testing.T) {
 	if len(secret.Data) == 0 {
 		t.Fatal("No tls key/cert at secret")
 	}
+
+	nextRotation := time.Now().Sub(manager.nextRotationDeadline())
+	start := time.Now()
+	err = wait.PollImmediate(nextRotation, nextRotation, func() (bool, error) {
+		manager.waitForDeadlineAndRotate()
+		return true, nil
+	})
+	if err != nil {
+		t.Fatalf("failed waitting for rotation: (%v)", err)
+	}
+	elapsed := time.Now().Sub(start)
+
+	if elapsed < nextRotation {
+		t.Fatalf("rotation done before deadline %s expected %s", elapsed, nextRotation)
+	}
+
+	err = client.Get(context.TODO(), types.NamespacedName{Name: "fooWebhook"}, mutatingWebhookConfiguration)
+	if err != nil {
+		t.Fatalf("get mutatingwebhookconfiguration: (%v)", err)
+	}
+	newClientConfig := mutatingWebhookConfiguration.Webhooks[0].ClientConfig
+	if bytes.Compare(newClientConfig.CABundle, clientConfig.CABundle) == 0 {
+		t.Fatal("CABundle not updated after rotation")
+	}
+
+	newSecret := corev1.Secret{}
+	err = client.Get(context.TODO(), types.NamespacedName{Name: "fooWebhook", Namespace: "fooWebhook"}, &newSecret)
+	if err != nil {
+		t.Fatalf("get secret: (%v)", err)
+	}
+
+	if bytes.Compare(newSecret.Data[corev1.TLSPrivateKeyKey], secret.Data[corev1.TLSPrivateKeyKey]) == 0 {
+		t.Fatal("Secret data not updated before expiration time")
+	}
+
+	if bytes.Compare(newSecret.Data[corev1.TLSCertKey], secret.Data[corev1.TLSCertKey]) == 0 {
+		t.Fatal("Secret data not updated before expiration time")
+	}
+
 }

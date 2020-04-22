@@ -28,7 +28,7 @@ func validatingWebhookConfig(webhook runtime.Object) *admissionregistrationv1bet
 // clientConfigList returns the the list of webhooks's mutation or validationg clientConfig, clientConfig is the information at the webhook config pointing to the service and path [1].
 //
 //  [1] https://godoc.org/k8s.io/kubernetes/pkg/apis/admissionregistration#WebhookClientConfig
-func (m manager) clientConfigList(webhook runtime.Object) []*admissionregistrationv1beta1.WebhookClientConfig {
+func (m *Manager) clientConfigList(webhook runtime.Object) []*admissionregistrationv1beta1.WebhookClientConfig {
 	clientConfigList := []*admissionregistrationv1beta1.WebhookClientConfig{}
 	if m.webhookType == MutatingWebhook {
 		mutatingWebhookConfig := mutatingWebhookConfig(webhook)
@@ -46,7 +46,7 @@ func (m manager) clientConfigList(webhook runtime.Object) []*admissionregistrati
 	return clientConfigList
 }
 
-func (m manager) webhookConfiguration() (runtime.Object, error) {
+func (m *Manager) webhookConfiguration() (runtime.Object, error) {
 	var webhook runtime.Object
 	if m.webhookType == MutatingWebhook {
 		webhook = &admissionregistrationv1beta1.MutatingWebhookConfiguration{}
@@ -74,7 +74,7 @@ func (m manager) webhookConfiguration() (runtime.Object, error) {
 	return webhook, err
 }
 
-func (m manager) updateWebhookCABundle() error {
+func (m *Manager) updateWebhookCABundle() error {
 	m.log.Info("Updating CA bundle for webhook")
 	ca := triple.EncodeCertPEM(m.caKeyPair.Cert)
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {

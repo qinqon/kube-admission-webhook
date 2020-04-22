@@ -17,16 +17,14 @@ import (
 	"github.com/qinqon/kube-admission-webhook/pkg/webhook/server/certificate/triple"
 )
 
-type manager struct {
-	client           client.Client
-	webhookName      string
-	webhookType      WebhookType
-	keyPairByService map[types.NamespacedName]*triple.KeyPair
-	caKeyPair        *triple.KeyPair
-	now              func() time.Time
-	stopCh           chan struct{}
-	log              logr.Logger
-	ready            bool
+type Manager struct {
+	client        client.Client
+	webhookName   string
+	webhookType   WebhookType
+	caKeyPair     *triple.KeyPair
+	now           func() time.Time
+	certsDuration time.Duration
+	log           logr.Logger
 }
 
 type WebhookType string
@@ -34,6 +32,7 @@ type WebhookType string
 const (
 	MutatingWebhook   WebhookType = "Mutating"
 	ValidatingWebhook WebhookType = "Validating"
+	OneYearDuration               = 365 * 24 * time.Hour
 )
 
 // NewManager with create a certManager that generated a secret per service
@@ -57,58 +56,71 @@ func NewManager(
 	client client.Client,
 	webhookName string,
 	webhookType WebhookType,
-) *manager {
+	certsDuration time.Duration,
+) *Manager {
 
-	m := &manager{
-		stopCh:           make(chan struct{}),
-		client:           client,
-		webhookName:      webhookName,
-		webhookType:      webhookType,
-		keyPairByService: map[types.NamespacedName]*triple.KeyPair{},
-		now:              time.Now,
-		ready:            false,
+	m := &Manager{
+		client:        client,
+		webhookName:   webhookName,
+		webhookType:   webhookType,
+		now:           time.Now,
+		certsDuration: certsDuration,
 		log: logf.Log.WithName("webhook/server/certificate/manager").
 			WithValues("webhookType", webhookType, "webhookName", webhookName),
 	}
 	return m
 }
 
-// Will start the the underlaying client-go cert manager [1]  and
-// wait for TLS key and cert to be generated
+// Start the cert manager until stopCh is close, the cert manager is in charge
+// of rotate certificate if needed.
 //
-// [1] https://godoc.org/k8s.io/client-go/util/certificate
-func (m *manager) Start() error {
+// It  implemenets Runnable [1] so manager can add this to a
+// controller runtime manager
+//
+// [1] https://github.com/kubernetes-sigs/controller-runtime/blob/master/pkg/manager/manager.go#L208
+func (m *Manager) Start(stopCh <-chan struct{}) error {
 	m.log.Info("Starting cert manager")
 
-	go wait.Until(func() {
-		deadline := m.nextRotationDeadline()
-		if sleepInterval := deadline.Sub(m.now()); sleepInterval > 0 {
-			m.log.Info(fmt.Sprintf("Waiting %v for next certificate rotation", sleepInterval))
-
-			timer := time.NewTimer(sleepInterval)
-			defer timer.Stop()
-
-			select {
-			case <-timer.C:
-			}
-		}
-
-		backoff := wait.Backoff{
-			Duration: 2 * time.Second,
-			Factor:   2,
-			Jitter:   0.1,
-			Steps:    5,
-		}
-		if err := wait.ExponentialBackoff(backoff, m.rotateCondition); err != nil {
-			utilruntime.HandleError(fmt.Errorf("Reached backoff limit, still unable to rotate certs: %v", err))
-			wait.PollInfinite(32*time.Second, m.rotateCondition)
-		}
-	}, time.Second, m.stopCh)
+	wait.Until(func() {
+		m.waitForDeadlineAndRotate()
+	}, time.Second, stopCh)
 
 	return nil
 }
 
-func (m *manager) rotateCondition() (bool, error) {
+func (m *Manager) waitForDeadlineAndRotate() {
+	deadline := m.nextRotationDeadline()
+	now := m.now()
+	elapsedToRotate := deadline.Sub(now)
+	m.log.Info(fmt.Sprintf("Cert rotation times {now: %s, deadline: %s, elapsedToRotate: %s}", now, deadline, elapsedToRotate))
+	if elapsedToRotate > 0 {
+		m.log.Info(fmt.Sprintf("Waiting %v for next certificate rotation", elapsedToRotate))
+
+		timer := time.NewTimer(elapsedToRotate)
+		defer timer.Stop()
+
+		select {
+		case <-timer.C:
+		}
+	}
+	// Retry rotate if it fails no timeout is added here since this is
+	// the only thing that cert manager has to do, server will be function
+	// until it reached expiricy in case of error somewhere.
+	err := wait.PollImmediateInfinite(32*time.Second, m.rotateCondition)
+	if err != nil {
+		utilruntime.HandleError(fmt.Errorf("Unable to rotate certs: %v", err))
+	}
+}
+
+// In case of running it under controller-runtime the manager has to be running
+// at one pod per cluster since it generate new caBundle and it has to be unique
+// per tls secrets if done otherwise caBundle get overwritten and it could not match
+// the TLS secret.
+func (m *Manager) NeedLeaderElection() bool {
+	return true
+}
+
+func (m *Manager) rotateCondition() (bool, error) {
 	err := m.rotate()
 	if err != nil {
 		utilruntime.HandleError(err)
@@ -117,15 +129,11 @@ func (m *manager) rotateCondition() (bool, error) {
 	return true, nil
 }
 
-func (m *manager) rotate() error {
-
-	m.ready = false
+func (m *Manager) rotate() error {
 
 	m.log.Info("Rotating TLS cert/key")
 
-	oneYearDuration := 365 * 24 * time.Hour
-
-	caKeyPair, err := triple.NewCA(m.webhookName, oneYearDuration)
+	caKeyPair, err := triple.NewCA(m.webhookName, m.certsDuration)
 	if err != nil {
 		return errors.Wrap(err, "failed generating CA cert/key")
 	}
@@ -152,7 +160,7 @@ func (m *manager) rotate() error {
 			"cluster.local",
 			nil,
 			nil,
-			oneYearDuration,
+			m.certsDuration,
 		)
 		if err != nil {
 			return errors.Wrapf(err, "failed creating server key/cert for service %+v", service)
@@ -160,15 +168,13 @@ func (m *manager) rotate() error {
 		m.createOrUpdateTLSSecret(service, keyPair)
 	}
 
-	m.ready = true
-
 	return nil
 }
 
 // nextRotationDeadline returns a value for the threshold at which the
 // current certificate should be rotated, 80%+/-10% of the expiration of the
 // certificate.
-func (m *manager) nextRotationDeadline() time.Time {
+func (m *Manager) nextRotationDeadline() time.Time {
 	if m.caKeyPair == nil {
 		m.log.Info("Certificates not created, forcing roration")
 		return m.now()
@@ -191,15 +197,4 @@ func (m *manager) nextRotationDeadline() time.Time {
 // This function is represented as a variable to allow replacement during testing.
 var jitteryDuration = func(totalDuration float64) time.Duration {
 	return wait.Jitter(time.Duration(totalDuration), 0.2) - time.Duration(totalDuration*0.3)
-}
-
-func (m *manager) Stop() {
-	m.log.Info("Stopping cert manager")
-	close(m.stopCh)
-}
-
-func (m *manager) WaitForReadiness() error {
-	return wait.PollImmediate(5*time.Second, 20*time.Second, func() (bool, error) {
-		return m.ready, nil
-	})
 }

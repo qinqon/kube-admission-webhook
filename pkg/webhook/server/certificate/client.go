@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 )
 
-func (m manager) get(key types.NamespacedName, value runtime.Object) error {
+func (m *Manager) get(key types.NamespacedName, value runtime.Object) error {
 	return wait.PollImmediate(5*time.Second, 30*time.Second, func() (bool, error) {
 		err := m.client.Get(context.TODO(), key, value)
 		if err != nil {
