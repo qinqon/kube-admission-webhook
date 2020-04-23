@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/qinqon/kube-admission-webhook/pkg/controller"
 	webhookserver "github.com/qinqon/kube-admission-webhook/pkg/webhook/server"
 	"github.com/qinqon/kube-admission-webhook/pkg/webhook/server/certificate"
 
@@ -10,7 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -28,16 +28,32 @@ func main() {
 
 	// Setup a Manager
 	entryLog.Info("setting up manager")
-	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
+	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
+		LeaderElectionNamespace: "mynamespace",
+		LeaderElectionID:        "foo-lock",
+		LeaderElection:          true,
+	})
 	if err != nil {
 		entryLog.Error(err, "unable to set up overall controller manager")
 		os.Exit(1)
 	}
 
 	// Setup a new controller to reconcile ReplicaSets
-	entryLog.Info("Setting up controller")
-	c, err := controller.New("foo-controller", mgr, controller.Options{
-		Reconciler: &reconcileReplicaSet{client: mgr.GetClient(), log: log.WithName("reconciler")},
+	entryLog.Info("Setting up controller without leader election")
+	controllerWithoutLeaderElection, err := controller.New("foo-controller-without-leader-election", mgr, controller.Options{
+		WithoutLeaderElection: true,
+		Reconciler:            &reconcileReplicaSet{client: mgr.GetClient(), log: log.WithName("reconciler")},
+	})
+	if err != nil {
+		entryLog.Error(err, "unable to set up individual controller")
+		os.Exit(1)
+	}
+
+	// Setup a new controller to reconcile ReplicaSets
+	entryLog.Info("Setting up controller with leader election")
+	controllerWithLeaderElection, err := controller.New("foo-controller-with-leader-election", mgr, controller.Options{
+		WithoutLeaderElection: false,
+		Reconciler:            &reconcileReplicaSet{client: mgr.GetClient(), log: log.WithName("reconciler")},
 	})
 	if err != nil {
 		entryLog.Error(err, "unable to set up individual controller")
@@ -45,13 +61,13 @@ func main() {
 	}
 
 	// Watch ReplicaSets and enqueue ReplicaSet object key
-	if err := c.Watch(&source.Kind{Type: &appsv1.ReplicaSet{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err := controllerWithoutLeaderElection.Watch(&source.Kind{Type: &appsv1.ReplicaSet{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		entryLog.Error(err, "unable to watch ReplicaSets")
 		os.Exit(1)
 	}
 
 	// Watch Pods and enqueue owning ReplicaSet key
-	if err := c.Watch(&source.Kind{Type: &corev1.Pod{}},
+	if err := controllerWithLeaderElection.Watch(&source.Kind{Type: &corev1.Pod{}},
 		&handler.EnqueueRequestForOwner{OwnerType: &appsv1.ReplicaSet{}, IsController: true}); err != nil {
 		entryLog.Error(err, "unable to watch Pods")
 		os.Exit(1)
