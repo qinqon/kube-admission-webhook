@@ -17,14 +17,36 @@ import (
 	"github.com/qinqon/kube-admission-webhook/pkg/webhook/server/certificate/triple"
 )
 
+// Manager do the CA and service certificate/key generation and expiration
+// handling.
+// It will generate one CA for the webhook configuration and a
+// secret per Service referenced on it. One unique instance has to run at
+// at cluster to monitor expiration time and do rotations.
 type Manager struct {
-	client        client.Client
-	webhookName   string
-	webhookType   WebhookType
-	caKeyPair     *triple.KeyPair
-	now           func() time.Time
+	// client contains the controller-runtime client from the manager.
+	client client.Client
+
+	// webhookName The Mutating or Validating Webhook configuration name
+	webhookName string
+
+	// webhookType The Mutating or Validating Webhook configuration type
+	webhookType WebhookType
+
+	// caKeyPair contains the generated CA certificate and key
+	caKeyPair *triple.KeyPair
+
+	// now is an artifact to do some unit testing without waiting for
+	// expiration time.
+	now func() time.Time
+
+	// certsDuration configurated duration for CA and service certificates
+	// there is no distintion between the two to simplify manager logic
+	// and monitor only CA certificate.
 	certsDuration time.Duration
-	log           logr.Logger
+
+	// log initialized log that containes the webhook configuration name and
+	// namespace so it's easy to debug.
+	log logr.Logger
 }
 
 type WebhookType string
@@ -71,8 +93,8 @@ func NewManager(
 	return m
 }
 
-// Start the cert manager until stopCh is close, the cert manager is in charge
-// of rotate certificate if needed.
+// Start the cert manager until stopCh is closed, the cert manager is in charge
+// rotation of certificates if needed.
 //
 // It  implemenets Runnable [1] so manager can add this to a
 // controller runtime manager
@@ -106,7 +128,7 @@ func (m *Manager) waitForDeadlineAndRotate() {
 	// Retry rotate if it fails no timeout is added here since this is
 	// the only thing that cert manager has to do, server will be function
 	// until it reached expiricy in case of error somewhere.
-	err := wait.PollImmediateInfinite(32*time.Second, m.rotateCondition)
+	err := wait.PollImmediateInfinite(32*time.Second, m.rotateWaitCondition)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("Unable to rotate certs: %v", err))
 	}
@@ -120,7 +142,10 @@ func (m *Manager) NeedLeaderElection() bool {
 	return true
 }
 
-func (m *Manager) rotateCondition() (bool, error) {
+// rotateWaitCondition wraps the rotate function into a `wait` Condition
+// it will transform the error into a `not ready` flag and log and
+// store error with `utilruntime.HandleError`.
+func (m *Manager) rotateWaitCondition() (bool, error) {
 	err := m.rotate()
 	if err != nil {
 		utilruntime.HandleError(err)
@@ -145,7 +170,7 @@ func (m *Manager) rotate() error {
 		return errors.Wrap(err, "failed to update CA bundle at webhook")
 	}
 
-	webhookConf, err := m.webhookConfiguration()
+	webhookConf, err := m.readyWebhookConfiguration()
 	if err != nil {
 		return errors.Wrap(err, "failed to reading configuration")
 	}
@@ -165,7 +190,7 @@ func (m *Manager) rotate() error {
 		if err != nil {
 			return errors.Wrapf(err, "failed creating server key/cert for service %+v", service)
 		}
-		m.createOrUpdateTLSSecret(service, keyPair)
+		m.applyTLSSecret(service, keyPair)
 	}
 
 	return nil
