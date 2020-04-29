@@ -2,9 +2,9 @@
 k8s admission webhook library with certificate rotation and caBundle update.
 
 ## CA/Service certificate/key generation
-The library generates at RSA key with 2048 size both for CA and server and
-certificate the share the expiration time so all the CA and service certificates
-are rotated at onces just before expiration time.
+The library generates RSA keys with 2048 size and certificate for both for CA and server.
+They share the expiration time so all the CA and service certificates
+are rotated at once just before expiration time.
 
 ## Webhook service
 It has a one year expiration time harcoded and apart from wrapping the
@@ -17,7 +17,7 @@ It's implemented as a controller runtime `Runnable` to be plug into the manager
 to re-use controller-runtime lifecycle code. The cert manager instance
 has to be unique per cluster so either is running a a `Deployment` with proper
 replication or use Leader Election at controller-runtime logic, if this is the
-case in case the other controllers need to be non leader election a drop in
+case, in case the other controllers need to be non leader election a drop in
 place controller has beeing added to this project.
 
 ## Examples

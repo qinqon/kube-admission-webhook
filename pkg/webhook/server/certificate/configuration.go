@@ -25,7 +25,7 @@ func validatingWebhookConfig(webhook runtime.Object) *admissionregistrationv1bet
 	return webhook.(*admissionregistrationv1beta1.ValidatingWebhookConfiguration)
 }
 
-// clientConfigList returns the the list of webhooks's mutation or validationg WebhookClientConfig
+// clientConfigList returns the the list of webhooks's mutation or validating WebhookClientConfig
 //
 // The WebhookClientConfig type is share between mutating or validating so we can have a common function
 // that uses the interface runtime.Object and do some type checking to access it [1].
