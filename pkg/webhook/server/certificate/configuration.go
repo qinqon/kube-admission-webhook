@@ -103,3 +103,11 @@ func (m *Manager) updateWebhookCABundle() error {
 	}
 	return nil
 }
+
+func (m *Manager) CABundle() ([]byte, error) {
+	webhook, err := m.readyWebhookConfiguration()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get %s webhook configuration %s", m.webhookType, m.webhookName)
+	}
+	return m.clientConfigList(webhook)[0].CABundle, nil
+}
