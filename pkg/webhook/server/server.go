@@ -14,6 +14,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -43,6 +44,7 @@ func New(client client.Client, webhookName string, webhookType certificate.Webho
 		log:         logf.Log.WithName("webhook/server"),
 	}
 	s.UpdateOpts(serverOpts...)
+	s.webhookServer.Register("/readyz", healthz.CheckHandler{Checker: healthz.Ping})
 	return s
 }
 
