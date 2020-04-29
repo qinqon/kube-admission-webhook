@@ -1,6 +1,7 @@
 package certificate
 
 import (
+	"crypto/x509"
 	"fmt"
 	"time"
 
@@ -33,7 +34,7 @@ type Manager struct {
 	webhookType WebhookType
 
 	// caKeyPair contains the generated CA certificate and key
-	caKeyPair *triple.KeyPair
+	caCert *x509.Certificate
 
 	// now is an artifact to do some unit testing without waiting for
 	// expiration time.
@@ -103,11 +104,28 @@ func NewManager(
 func (m *Manager) Start(stopCh <-chan struct{}) error {
 	m.log.Info("Starting cert manager")
 
+	m.loadCACertFromCABundle()
+
 	wait.Until(func() {
 		m.waitForDeadlineAndRotate()
 	}, time.Second, stopCh)
 
 	return nil
+}
+
+// In case the manager is restarted we have to load the current CA instead
+// of generating new one
+func (m *Manager) loadCACertFromCABundle() {
+	caBundle, err := m.CABundle()
+	if err != nil || len(caBundle) == 0 {
+		return
+	}
+
+	cas, err := triple.ParseCertsPEM(caBundle)
+	if err != nil || len(cas) == 0 {
+		return
+	}
+	m.caCert = cas[0]
 }
 
 func (m *Manager) waitForDeadlineAndRotate() {
@@ -163,7 +181,7 @@ func (m *Manager) rotate() error {
 		return errors.Wrap(err, "failed generating CA cert/key")
 	}
 
-	m.caKeyPair = caKeyPair
+	m.caCert = caKeyPair.Cert
 
 	err = m.updateWebhookCABundle()
 	if err != nil {
@@ -200,13 +218,13 @@ func (m *Manager) rotate() error {
 // current certificate should be rotated, 80%+/-10% of the expiration of the
 // certificate.
 func (m *Manager) nextRotationDeadline() time.Time {
-	if m.caKeyPair == nil {
+	if m.caCert == nil {
 		m.log.Info("Certificates not created, forcing roration")
 		return m.now()
 	}
-	notAfter := m.caKeyPair.Cert.NotAfter
-	totalDuration := float64(notAfter.Sub(m.caKeyPair.Cert.NotBefore))
-	deadline := m.caKeyPair.Cert.NotBefore.Add(jitteryDuration(totalDuration))
+	notAfter := m.caCert.NotAfter
+	totalDuration := float64(notAfter.Sub(m.caCert.NotBefore))
+	deadline := m.caCert.NotBefore.Add(jitteryDuration(totalDuration))
 
 	m.log.Info(fmt.Sprintf("Certificate expiration is %v, rotation deadline is %v", notAfter, deadline))
 	return deadline

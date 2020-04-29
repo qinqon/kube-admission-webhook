@@ -18,8 +18,6 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
-
-	"github.com/qinqon/kube-admission-webhook/pkg/webhook/server/certificate/triple"
 )
 
 var (
@@ -57,11 +55,9 @@ func TestSetRotationDeadline(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			m := Manager{
-				caKeyPair: &triple.KeyPair{
-					Cert: &x509.Certificate{
-						NotBefore: tc.notBefore,
-						NotAfter:  tc.notAfter,
-					},
+				caCert: &x509.Certificate{
+					NotBefore: tc.notBefore,
+					NotAfter:  tc.notAfter,
 				},
 				now: func() time.Time { return now },
 				log: log,

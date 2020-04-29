@@ -79,7 +79,7 @@ func (m *Manager) readyWebhookConfiguration() (runtime.Object, error) {
 
 func (m *Manager) updateWebhookCABundle() error {
 	m.log.Info("Updating CA bundle for webhook")
-	ca := triple.EncodeCertPEM(m.caKeyPair.Cert)
+	ca := triple.EncodeCertPEM(m.caCert)
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 
 		webhook, err := m.readyWebhookConfiguration()
