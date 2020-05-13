@@ -103,7 +103,14 @@ func TestWaitForDeadlineAndRotate(t *testing.T) {
 		},
 	}
 
-	objs := []runtime.Object{mutatingWebhookConfiguration}
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "fooWebhook",
+			Name:      "fooWebhook",
+		},
+	}
+
+	objs := []runtime.Object{mutatingWebhookConfiguration, service}
 
 	client := fake.NewFakeClient(objs...)
 	certsDuration := time.Minute
