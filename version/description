@@ -1,3 +1,5 @@
-v0.6.0
+v0.7.0
 
-Replace CSR mechanism with self generated keys and self signed cert (#10)
+Bugs:
+* Manage secret's owner correctly (#15)
+
