@@ -1,5 +1,5 @@
-v0.7.0
+v0.8.0
 
 Bugs:
-* Manage secret's owner correctly (#15)
-
+* Bump github-release tool to 0.8.1 (#18)
+* fix index out of range error when trying to access client-config array in empty webhook instance (#17)
