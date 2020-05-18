@@ -31,7 +31,7 @@ $(CLUSTER_DIR)/%: $(install_kubevirtci)
 	$(install_kubevirtci)
 
 $(GITHUB_RELEASE): $(GO)
-	$(GO) install ./vendor/github.com/aktau/github-release
+	$(GO) install ./vendor/github.com/github-release/github-release
 
 $(GO):
 	hack/install-go.sh $(BIN_DIR)
