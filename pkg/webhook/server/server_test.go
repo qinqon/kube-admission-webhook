@@ -4,7 +4,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	certificate "github.com/qinqon/kube-admission-webhook/pkg/webhook/server/certificate"
+	certificate "github.com/qinqon/kube-admission-webhook/pkg/certificate"
 )
 
 var _ = Describe("Server", func() {

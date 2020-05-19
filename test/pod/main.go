@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
+	"github.com/qinqon/kube-admission-webhook/pkg/certificate"
 	"github.com/qinqon/kube-admission-webhook/pkg/controller"
 	webhookserver "github.com/qinqon/kube-admission-webhook/pkg/webhook/server"
-	"github.com/qinqon/kube-admission-webhook/pkg/webhook/server/certificate"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"

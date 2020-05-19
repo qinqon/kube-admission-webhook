@@ -20,8 +20,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/qinqon/kube-admission-webhook/pkg/webhook/server/certificate"
-	"github.com/qinqon/kube-admission-webhook/pkg/webhook/server/certificate/triple"
+	"github.com/qinqon/kube-admission-webhook/pkg/certificate"
+	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
 )
 
 type Server struct {
@@ -74,7 +74,7 @@ func (s *Server) UpdateOpts(serverOpts ...ServerModifier) {
 }
 
 func (s *Server) Add(mgr manager.Manager) error {
-	err := mgr.Add(s.certManager)
+	err := s.certManager.Add(mgr)
 	if err != nil {
 		return errors.Wrap(err, "failed adding certificate manager to controller-runtime manager")
 	}

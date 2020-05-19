@@ -2,6 +2,7 @@ package certificate
 
 import (
 	"context"
+	"crypto/x509"
 
 	"github.com/pkg/errors"
 
@@ -13,7 +14,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
-	"github.com/qinqon/kube-admission-webhook/pkg/webhook/server/certificate/triple"
+	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
 )
 
 func updateTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) *corev1.Secret {
@@ -71,4 +72,51 @@ func (m *Manager) applyTLSSecret(service types.NamespacedName, keyPair *triple.K
 		}
 		return m.client.Update(context.TODO(), updateTLSSecret(secret, keyPair))
 	})
+}
+
+// checkTLS will verify that the caBundle and Secret are valid and can
+// be used to verify
+func (m *Manager) verifyTLSSecret(secretKey types.NamespacedName, caBundle []byte) error {
+	secret := corev1.Secret{}
+	err := m.get(secretKey, &secret)
+	if err != nil {
+		return errors.Wrapf(err, "failed getting TLS secret %s", secretKey)
+	}
+
+	keyPEM, found := secret.Data[corev1.TLSPrivateKeyKey]
+	if !found {
+		return errors.New("TLS key not found")
+	}
+
+	_, err = triple.ParsePrivateKeyPEM(keyPEM)
+	if err != nil {
+		return errors.Wrap(err, "failed parsing PEM TLS key")
+	}
+
+	certsPEM, found := secret.Data[corev1.TLSCertKey]
+	if !found {
+		return errors.New("TLS certs not found")
+	}
+
+	certs, err := triple.ParseCertsPEM(certsPEM)
+	if err != nil {
+		return errors.Wrap(err, "failed parsing PEM TLS certs")
+	}
+
+	cas := x509.NewCertPool()
+	ok := cas.AppendCertsFromPEM([]byte(caBundle))
+	if !ok {
+		return errors.New("failed to parse CA bundle")
+	}
+
+	opts := x509.VerifyOptions{
+		Roots:   cas,
+		DNSName: certs[0].DNSNames[0],
+	}
+
+	if _, err := certs[0].Verify(opts); err != nil {
+		return errors.Wrap(err, "failed to verify certificate")
+	}
+
+	return nil
 }
