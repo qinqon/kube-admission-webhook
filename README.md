@@ -24,3 +24,12 @@ place controller has beeing added to this project.
 There is a integration example under test/pod it contains two controllers and
 a webhook, one of the controllers uses leader election there other do not so
 all the bits from this project are represented.
+
+## TroubleShooting
+There is a known race issue when the pod using this lib is controlled by an external operator,
+where this lib's secret/caBundle might get out of sync.
+To workaround this issue should it happen to you, We introduced a workaround script in /hack/force-cert-rotation.sh
+For usage example:
+ ```bash
+./hack/force-cert-rotation.sh --help
+```
