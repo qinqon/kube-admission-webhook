@@ -27,7 +27,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -36,6 +35,8 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -265,4 +266,33 @@ func ipsToStrings(ips []net.IP) []string {
 		ss = append(ss, ip.String())
 	}
 	return ss
+}
+
+func VerifyTLS(certsPEM, keyPEM, caBundle []byte) error {
+	_, err := ParsePrivateKeyPEM(keyPEM)
+	if err != nil {
+		return errors.Wrap(err, "failed parsing PEM TLS key")
+	}
+
+	certs, err := ParseCertsPEM(certsPEM)
+	if err != nil {
+		return errors.Wrap(err, "failed parsing PEM TLS certs")
+	}
+
+	cas := x509.NewCertPool()
+	ok := cas.AppendCertsFromPEM([]byte(caBundle))
+	if !ok {
+		return errors.New("failed to parse CA bundle")
+	}
+
+	opts := x509.VerifyOptions{
+		Roots:   cas,
+		DNSName: certs[0].DNSNames[0],
+	}
+
+	if _, err := certs[0].Verify(opts); err != nil {
+		return errors.Wrap(err, "failed to verify certificate")
+	}
+
+	return nil
 }

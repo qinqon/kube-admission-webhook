@@ -1,7 +1,6 @@
 package server
 
 import (
-	"crypto/x509"
 	"io/ioutil"
 	"os"
 	"path"
@@ -87,12 +86,14 @@ func (s *Server) Add(mgr manager.Manager) error {
 
 func (s *Server) checkTLS() error {
 
-	_, err := os.Stat(path.Join(s.webhookServer.CertDir, corev1.TLSPrivateKeyKey))
+	keyPath := path.Join(s.webhookServer.CertDir, corev1.TLSPrivateKeyKey)
+	_, err := os.Stat(keyPath)
 	if err != nil {
 		return errors.Wrap(err, "failed checking TLS key file stats")
 	}
 
-	_, err = os.Stat(path.Join(s.webhookServer.CertDir, corev1.TLSCertKey))
+	certsPath := path.Join(s.webhookServer.CertDir, corev1.TLSCertKey)
+	_, err = os.Stat(certsPath)
 	if err != nil {
 		return errors.Wrap(err, "failed checking TLS cert file stats")
 	}
@@ -102,19 +103,9 @@ func (s *Server) checkTLS() error {
 		return errors.Wrap(err, "failed reading for TLS key")
 	}
 
-	_, err = triple.ParsePrivateKeyPEM(key)
-	if err != nil {
-		return errors.Wrap(err, "failed parsing TLS key")
-	}
-
 	certPEM, err := ioutil.ReadFile(path.Join(s.webhookServer.CertDir, corev1.TLSCertKey))
 	if err != nil {
 		return errors.Wrap(err, "failed reading for TLS cert")
-	}
-
-	certs, err := triple.ParseCertsPEM(certPEM)
-	if err != nil {
-		return errors.Wrap(err, "failed parsing TLS cert")
 	}
 
 	caPEM, err := s.certManager.CABundle()
@@ -122,19 +113,9 @@ func (s *Server) checkTLS() error {
 		return errors.Wrap(err, "failed to retrieve CA cert")
 	}
 
-	cas := x509.NewCertPool()
-	ok := cas.AppendCertsFromPEM([]byte(caPEM))
-	if !ok {
-		return errors.New("failed to parse CA certificate")
-	}
-
-	opts := x509.VerifyOptions{
-		Roots:   cas,
-		DNSName: certs[0].DNSNames[0],
-	}
-
-	if _, err := certs[0].Verify(opts); err != nil {
-		return errors.Wrap(err, "failed to verify certificate")
+	err = triple.VerifyTLS(certPEM, key, caPEM)
+	if err != nil {
+		return errors.Wrapf(err, "failed verifying %s/%s", certsPath, keyPath)
 	}
 
 	return nil

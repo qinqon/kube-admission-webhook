@@ -2,7 +2,6 @@ package certificate
 
 import (
 	"context"
-	"crypto/x509"
 
 	"github.com/pkg/errors"
 
@@ -88,34 +87,14 @@ func (m *Manager) verifyTLSSecret(secretKey types.NamespacedName, caBundle []byt
 		return errors.New("TLS key not found")
 	}
 
-	_, err = triple.ParsePrivateKeyPEM(keyPEM)
-	if err != nil {
-		return errors.Wrap(err, "failed parsing PEM TLS key")
-	}
-
 	certsPEM, found := secret.Data[corev1.TLSCertKey]
 	if !found {
 		return errors.New("TLS certs not found")
 	}
 
-	certs, err := triple.ParseCertsPEM(certsPEM)
+	err = triple.VerifyTLS(certsPEM, keyPEM, []byte(caBundle))
 	if err != nil {
-		return errors.Wrap(err, "failed parsing PEM TLS certs")
-	}
-
-	cas := x509.NewCertPool()
-	ok := cas.AppendCertsFromPEM([]byte(caBundle))
-	if !ok {
-		return errors.New("failed to parse CA bundle")
-	}
-
-	opts := x509.VerifyOptions{
-		Roots:   cas,
-		DNSName: certs[0].DNSNames[0],
-	}
-
-	if _, err := certs[0].Verify(opts); err != nil {
-		return errors.Wrap(err, "failed to verify certificate")
+		return errors.Wrapf(err, "failed verifying TLS from server Secret %s", secretKey)
 	}
 
 	return nil
