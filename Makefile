@@ -48,8 +48,8 @@ vet: $(GO)
 test: $(GO) vet format
 	$(GO) test -timeout 2m -v ./pkg/...
 
-pod:
-	$(GO) build -o $(BIN_DIR) ./pkg/... ./test/pod
+example: $(GO)
+	$(GO) build -o $(BIN_DIR) ./pkg/... ./test/...
 
 vendor:
 	$(GO) mod tidy

@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package example
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"net/http"
 
 	corev1 "k8s.io/api/core/v1"
@@ -26,41 +26,40 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-// +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=fail,groups="",resources=pods,verbs=create;update,versions=v1,name=mpod.kb.io
+// +kubebuilder:webhook:path=/validate-v1-pod,mutating=false,failurePolicy=fail,groups="",resources=pods,verbs=create;update,versions=v1,name=vpod.kb.io
 
-// podAnnotator annotates Pods
-type podAnnotator struct {
+// PodValidator validates Pods
+type PodValidator struct {
 	Client  client.Client
 	decoder *admission.Decoder
 }
 
-// podAnnotator adds an annotation to every incoming pods.
-func (a *podAnnotator) Handle(ctx context.Context, req admission.Request) admission.Response {
+// PodValidator admits a pod iff a specific annotation exists.
+func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	pod := &corev1.Pod{}
 
-	err := a.decoder.Decode(req, pod)
+	err := v.decoder.Decode(req, pod)
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	if pod.Annotations == nil {
-		pod.Annotations = map[string]string{}
+	key := "example-mutating-admission-webhook"
+	anno, found := pod.Annotations[key]
+	if !found {
+		return admission.Denied(fmt.Sprintf("missing annotation %s", key))
 	}
-	pod.Annotations["example-mutating-admission-webhook"] = "foo"
-
-	marshaledPod, err := json.Marshal(pod)
-	if err != nil {
-		return admission.Errored(http.StatusInternalServerError, err)
+	if anno != "foo" {
+		return admission.Denied(fmt.Sprintf("annotation %s did not have value %q", key, "foo"))
 	}
 
-	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
+	return admission.Allowed("")
 }
 
-// podAnnotator implements admission.DecoderInjector.
+// PodValidator implements admission.DecoderInjector.
 // A decoder will be automatically injected.
 
 // InjectDecoder injects the decoder.
-func (a *podAnnotator) InjectDecoder(d *admission.Decoder) error {
-	a.decoder = d
+func (v *PodValidator) InjectDecoder(d *admission.Decoder) error {
+	v.decoder = d
 	return nil
 }
