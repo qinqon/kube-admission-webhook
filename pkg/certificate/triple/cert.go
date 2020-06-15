@@ -37,6 +37,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 const (
@@ -269,6 +271,8 @@ func ipsToStrings(ips []net.IP) []string {
 }
 
 func VerifyTLS(certsPEM, keyPEM, caBundle []byte) error {
+	logger := logf.Log.WithName("kube-admission-webhook.VerifyTLS")
+
 	_, err := ParsePrivateKeyPEM(keyPEM)
 	if err != nil {
 		return errors.Wrap(err, "failed parsing PEM TLS key")
@@ -294,5 +298,6 @@ func VerifyTLS(certsPEM, keyPEM, caBundle []byte) error {
 		return errors.Wrap(err, "failed to verify certificate")
 	}
 
+	logger.Info("TLS certificates chain verified")
 	return nil
 }
