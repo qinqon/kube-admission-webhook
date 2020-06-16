@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"net/http"
+
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -111,6 +113,12 @@ func (m *managerNoopAdd) GetAPIReader() client.Reader {
 }
 func (m *managerNoopAdd) GetWebhookServer() *webhook.Server {
 	return m.mgr.GetWebhookServer()
+}
+func (m *managerNoopAdd) AddMetricsExtraHandler(path string, handler http.Handler) error {
+	return m.mgr.AddMetricsExtraHandler(path, handler)
+}
+func (m *managerNoopAdd) Elected() <-chan struct{} {
+	return m.mgr.Elected()
 }
 
 // Bypass add that's what we want this manager for since we cannot
