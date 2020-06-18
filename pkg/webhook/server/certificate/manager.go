@@ -210,7 +210,7 @@ func (m *Manager) rotate() error {
 		}
 		err = m.applyTLSSecret(service, keyPair)
 		if err != nil {
-			return errors.Wrap(err, "failed applying RLS secret")
+			return errors.Wrap(err, "failed applying TLS secret")
 		}
 	}
 

@@ -13,10 +13,7 @@ import (
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
@@ -94,69 +91,94 @@ var _ = Describe("certificate manager", func() {
 		var (
 			certsDuration                = 30 * time.Second
 			manager                      *Manager
-			client                       client.Client
-			mutatingWebhookConfiguration = &admissionregistrationv1beta1.MutatingWebhookConfiguration{
+			mutatingWebhookConfiguration admissionregistrationv1beta1.MutatingWebhookConfiguration
+			service                      corev1.Service
+		)
+
+		BeforeEach(func() {
+			mutatingWebhookConfiguration = admissionregistrationv1beta1.MutatingWebhookConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "fooWebhook",
+					Name: "foowebhook",
 				},
 				Webhooks: []admissionregistrationv1beta1.MutatingWebhook{
 					admissionregistrationv1beta1.MutatingWebhook{
-						Name: "fooWebhook",
+						Name: "foowebhook.qinqon.io",
 						ClientConfig: admissionregistrationv1beta1.WebhookClientConfig{
 							Service: &admissionregistrationv1beta1.ServiceReference{
-								Name:      "fooWebhook",
-								Namespace: "fooWebhook",
+								Name:      "foowebhook",
+								Namespace: "foowebhook",
 							},
 						},
 					},
 				},
 			}
 
-			service = &corev1.Service{
+			service = corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "fooWebhook",
-					Name:      "fooWebhook",
+					Namespace: "foowebhook",
+					Name:      "foowebhook",
+				},
+				Spec: corev1.ServiceSpec{
+					Ports: []corev1.ServicePort{
+						corev1.ServicePort{
+							Name: "https",
+							Port: 8443,
+						},
+					},
 				},
 			}
-		)
-		BeforeEach(func() {
-			By("Init fake client with mutatingwebhookconfiguration and service")
-			objs := []runtime.Object{mutatingWebhookConfiguration, service}
-			client = fake.NewFakeClient(objs...)
+
+			err := cli.Create(context.TODO(), &mutatingWebhookConfiguration)
+			Expect(err).ToNot(HaveOccurred(), "should success creating mutatingwebhookconfiguration")
+
+			err = cli.Create(context.TODO(), &service)
+			Expect(err).ToNot(HaveOccurred(), "should success creating service")
 
 			By("Calling waitForDeadlineAndRotate for the first time")
-			manager = NewManager(client, "fooWebhook", MutatingWebhook, certsDuration)
+			manager = NewManager(cli, service.Name, MutatingWebhook, certsDuration)
 			manager.waitForDeadlineAndRotate()
 			//TODO Implement ErrorsHandler to take the errors that we have at
 			//     background
 
 		})
+		AfterEach(func() {
+
+			err := cli.Delete(context.TODO(), &mutatingWebhookConfiguration)
+			Expect(err).ToNot(HaveOccurred(), "should success deleteing service")
+
+			err = cli.Delete(context.TODO(), &service)
+			Expect(err).ToNot(HaveOccurred(), "should success deleteing service")
+
+			err = cli.Delete(context.TODO(), &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: service.Namespace, Name: service.Name}})
+			Expect(err).ToNot(HaveOccurred(), "should success deleteing service")
+
+		})
 		It("should create the secret and rotate CA and server certificates", func() {
 
-			err := client.Get(context.TODO(), types.NamespacedName{Name: "fooWebhook"}, mutatingWebhookConfiguration)
+			err := cli.Get(context.TODO(), types.NamespacedName{Name: mutatingWebhookConfiguration.Name}, &mutatingWebhookConfiguration)
 			Expect(err).ToNot(HaveOccurred(), "should success getting mutatingwebhookconfiguration")
 
-			clientConfig := mutatingWebhookConfiguration.Webhooks[0].ClientConfig
-			Expect(clientConfig.CABundle).ToNot(BeEmpty(), "should update CA budle")
+			cliConfig := mutatingWebhookConfiguration.Webhooks[0].ClientConfig
+			Expect(cliConfig.CABundle).ToNot(BeEmpty(), "should update CA budle")
 
 			secret := corev1.Secret{}
-			err = client.Get(context.TODO(), types.NamespacedName{Name: "fooWebhook", Namespace: "fooWebhook"}, &secret)
+			err = cli.Get(context.TODO(), types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, &secret)
 			Expect(err).ToNot(HaveOccurred(), "should success getting secret")
 			Expect(secret.Type).To(Equal(corev1.SecretTypeTLS), "should be a TLS secret")
 			Expect(secret.Data).ToNot(BeEmpty(), "should contain a secret with TLS key/cert")
 		})
 		Context("and called a second time", func() {
 			var (
-				secret       corev1.Secret
-				start        time.Time
-				clientConfig admissionregistrationv1beta1.WebhookClientConfig
+				secret    corev1.Secret
+				start     time.Time
+				cliConfig admissionregistrationv1beta1.WebhookClientConfig
 			)
 			BeforeEach(func() {
-				err := client.Get(context.TODO(), types.NamespacedName{Name: "fooWebhook"}, mutatingWebhookConfiguration)
+				err := cli.Get(context.TODO(), types.NamespacedName{Name: mutatingWebhookConfiguration.Name}, &mutatingWebhookConfiguration)
 				Expect(err).ToNot(HaveOccurred(), "should success getting mutatingwebhookconfiguration")
-				clientConfig = mutatingWebhookConfiguration.Webhooks[0].ClientConfig
+				cliConfig = mutatingWebhookConfiguration.Webhooks[0].ClientConfig
 
-				err = client.Get(context.TODO(), types.NamespacedName{Name: "fooWebhook", Namespace: "fooWebhook"}, &secret)
+				err = cli.Get(context.TODO(), types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, &secret)
 				Expect(err).ToNot(HaveOccurred(), "should success getting secret")
 
 				start = time.Now()
@@ -168,14 +190,14 @@ var _ = Describe("certificate manager", func() {
 				elapsed := time.Now().Sub(start)
 				Expect(elapsed).To(SatisfyAll(BeNumerically(">=", float64(certsDuration)*0.8), BeNumerically("<=", float64(certsDuration)*0.9)), "should wait the jittered elapsed time ")
 
-				err := client.Get(context.TODO(), types.NamespacedName{Name: "fooWebhook"}, mutatingWebhookConfiguration)
+				err := cli.Get(context.TODO(), types.NamespacedName{Name: mutatingWebhookConfiguration.Name}, &mutatingWebhookConfiguration)
 				Expect(err).ToNot(HaveOccurred(), "should success getting mutatingwebhookconfiguration")
 
 				newClientConfig := mutatingWebhookConfiguration.Webhooks[0].ClientConfig
-				Expect(newClientConfig.CABundle).ToNot(Equal(clientConfig.CABundle), "should rotate CA bundle")
+				Expect(newClientConfig.CABundle).ToNot(Equal(cliConfig.CABundle), "should rotate CA bundle")
 
 				newSecret := corev1.Secret{}
-				err = client.Get(context.TODO(), types.NamespacedName{Name: "fooWebhook", Namespace: "fooWebhook"}, &newSecret)
+				err = cli.Get(context.TODO(), types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, &newSecret)
 				Expect(err).ToNot(HaveOccurred(), "should success getting secret")
 				Expect(newSecret.Data[corev1.TLSPrivateKeyKey]).ToNot(Equal(secret.Data[corev1.TLSPrivateKeyKey]), "should rotate TLS server key")
 				Expect(newSecret.Data[corev1.TLSCertKey]).ToNot(Equal(secret.Data[corev1.TLSCertKey]), "should rotate TLS server certificate")
