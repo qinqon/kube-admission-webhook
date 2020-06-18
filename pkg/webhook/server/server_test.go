@@ -1,11 +1,17 @@
 package server
 
 import (
-	"testing"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 
 	certificate "github.com/qinqon/kube-admission-webhook/pkg/webhook/server/certificate"
 )
 
-func TestStuff(t *testing.T) {
-	_ = New(nil, "foo", certificate.MutatingWebhook)
-}
+var _ = Describe("Server", func() {
+	Context("when constructor is called", func() {
+		It("should return a sever", func() {
+			server := New(nil, "foo", certificate.MutatingWebhook)
+			Expect(server).ToNot(BeNil())
+		})
+	})
+})
