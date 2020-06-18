@@ -208,7 +208,10 @@ func (m *Manager) rotate() error {
 		if err != nil {
 			return errors.Wrapf(err, "failed creating server key/cert for service %+v", service)
 		}
-		m.applyTLSSecret(service, keyPair)
+		err = m.applyTLSSecret(service, keyPair)
+		if err != nil {
+			return errors.Wrap(err, "failed applying RLS secret")
+		}
 	}
 
 	return nil

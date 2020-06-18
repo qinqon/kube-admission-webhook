@@ -9,7 +9,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	"github.com/qinqon/kube-admission-webhook/pkg/webhook/server/certificate/triple"
 )
@@ -29,6 +31,12 @@ func (m *Manager) newTLSSecret(serviceKey types.NamespacedName, keyPair *triple.
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed getting service %s to set secret owner", serviceKey)
 	}
+
+	serviceGVK, err := apiutil.GVKForObject(&service, scheme.Scheme)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed getting gvk from service %s", serviceKey)
+	}
+
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      service.Name,
@@ -36,8 +44,8 @@ func (m *Manager) newTLSSecret(serviceKey types.NamespacedName, keyPair *triple.
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					Name:       service.Name,
-					Kind:       service.TypeMeta.Kind,
-					APIVersion: service.TypeMeta.APIVersion,
+					Kind:       serviceGVK.Kind,
+					APIVersion: serviceGVK.GroupVersion().String(),
 					UID:        service.UID},
 			},
 		},
