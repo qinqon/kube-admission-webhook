@@ -46,7 +46,7 @@ vet: $(GO)
 	$(GO) vet ./pkg/...
 
 test: $(GO) vet format
-	$(GO) test -timeout 2m -v ./pkg/...
+	$(GO) test ./pkg/... -timeout 2m -ginkgo.v -ginkgo.noColor=true -test.v
 
 pod:
 	$(GO) build -o $(BIN_DIR) ./pkg/... ./test/pod

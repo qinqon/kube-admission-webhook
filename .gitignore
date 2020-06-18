@@ -16,3 +16,6 @@ build/
 
 # The kubevirtci installation dir
 kubevirtci/
+
+# Unit tests output
+junit*.xml
