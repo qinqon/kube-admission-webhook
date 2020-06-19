@@ -3,210 +3,201 @@ package certificate
 import (
 	"context"
 	"crypto/x509"
-	"testing"
+	"fmt"
 	"time"
 
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/gomega"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
-func TestNextRotateDeadlineForCert(t *testing.T) {
-
-	defer func(original func(float64) time.Duration) { jitteryDuration = original }(jitteryDuration)
-
-	now := time.Now()
-
-	testCases := []struct {
-		name         string
-		notBefore    time.Time
-		notAfter     time.Time
+var _ = Describe("certificate manager", func() {
+	type setRotationDeadlineCase struct {
+		notBefore    time.Duration
+		notAfter     time.Duration
 		shouldRotate bool
-	}{
-		{"just issued, still good", now.Add(-1 * time.Hour), now.Add(99 * time.Hour), false},
-		{"half way expired, still good", now.Add(-24 * time.Hour), now.Add(24 * time.Hour), false},
-		{"mostly expired, still good", now.Add(-69 * time.Hour), now.Add(31 * time.Hour), false},
-		{"just about expired, should rotate", now.Add(-91 * time.Hour), now.Add(9 * time.Hour), true},
-		{"nearly expired, should rotate", now.Add(-99 * time.Hour), now.Add(1 * time.Hour), true},
-		{"already expired, should rotate", now.Add(-10 * time.Hour), now.Add(-1 * time.Hour), true},
-		{"long duration", now.Add(-6 * 30 * 24 * time.Hour), now.Add(6 * 30 * 24 * time.Hour), true},
-		{"short duration", now.Add(-30 * time.Second), now.Add(30 * time.Second), true},
 	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	DescribeTable("SetRotationDeadline",
+		func(c setRotationDeadlineCase) {
+			log := logf.Log.WithName("webhook/server/certificate/manager_test")
+			now := time.Now()
+			notAfter := now.Add(c.notAfter)
+			notBefore := now.Add(c.notBefore)
+			defer func(original func(float64) time.Duration) { jitteryDuration = original }(jitteryDuration)
 			caCert := &x509.Certificate{
-				NotBefore: tc.notBefore,
-				NotAfter:  tc.notAfter,
+				NotBefore: notBefore,
+				NotAfter:  notAfter,
 			}
 			m := Manager{
 				now: func() time.Time { return now },
 				log: log,
 			}
-
-			jitteryDuration = func(float64) time.Duration { return time.Duration(float64(tc.notAfter.Sub(tc.notBefore)) * 0.7) }
-			lowerBound := tc.notBefore.Add(time.Duration(float64(tc.notAfter.Sub(tc.notBefore)) * 0.7))
+			jitteryDuration = func(float64) time.Duration { return time.Duration(float64(notAfter.Sub(notBefore)) * 0.7) }
+			lowerBound := notBefore.Add(time.Duration(float64(notAfter.Sub(notBefore)) * 0.7))
 
 			deadline := m.nextRotationDeadlineForCert(caCert)
 
-			if !deadline.Equal(lowerBound) {
-				t.Errorf("For notBefore %v, notAfter %v, the rotationDeadline %v should be %v.",
-					tc.notBefore,
-					tc.notAfter,
-					deadline,
-					lowerBound)
-			}
-		})
-	}
-}
+			Expect(deadline).To(Equal(lowerBound), fmt.Sprintf("should match deadline for notBefore %v and notAfter %v", notBefore, notAfter))
 
-func TestVerifyTLS(t *testing.T) {
+		},
+		Entry("just issued, still good", setRotationDeadlineCase{
+			notBefore:    -1 * time.Hour,
+			notAfter:     99 * time.Hour,
+			shouldRotate: false,
+		}),
+		Entry("half way expired, still good", setRotationDeadlineCase{
+			notBefore:    -24 * time.Hour,
+			notAfter:     24 * time.Hour,
+			shouldRotate: false,
+		}),
+		Entry("mostly expired, still good", setRotationDeadlineCase{
+			notBefore:    -69 * time.Hour,
+			notAfter:     31 * time.Hour,
+			shouldRotate: false,
+		}),
+		Entry("just about expired, should rotate", setRotationDeadlineCase{
+			notBefore:    -91 * time.Hour,
+			notAfter:     9 * time.Hour,
+			shouldRotate: true,
+		}),
+		Entry("nearly expired, should rotate", setRotationDeadlineCase{
+			notBefore:    -99 * time.Hour,
+			notAfter:     1 * time.Hour,
+			shouldRotate: true,
+		}),
+		Entry("already expired, should rotate", setRotationDeadlineCase{
+			notBefore:    -10 * time.Hour,
+			notAfter:     -1 * time.Hour,
+			shouldRotate: true,
+		}),
+		Entry("long duration", setRotationDeadlineCase{
+			notBefore:    -6 * 30 * 24 * time.Hour,
+			notAfter:     6 * 30 * 24 * time.Hour,
+			shouldRotate: true,
+		}),
+		Entry("short duration", setRotationDeadlineCase{
+			notBefore:    -30 * time.Second,
+			notAfter:     30 * time.Second,
+			shouldRotate: true,
+		}),
+	)
 
-	mutatingWebhookConfiguration := &admissionregistrationv1beta1.MutatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "fooWebhook",
-		},
-		Webhooks: []admissionregistrationv1beta1.MutatingWebhook{
-			admissionregistrationv1beta1.MutatingWebhook{
-				Name: "fooWebhook",
-				ClientConfig: admissionregistrationv1beta1.WebhookClientConfig{
-					Service: &admissionregistrationv1beta1.ServiceReference{
-						Name:      "fooWebhook",
-						Namespace: "fooWebhook",
-					},
-				},
-			},
-		},
-	}
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "fooWebhook",
-			Name:      "fooWebhook",
-		},
-	}
-
-	secret := corev1.Secret{
-		ObjectMeta: service.ObjectMeta,
+	type verifyTLSTestCase struct {
+		certificatesChain func(manager *Manager)
+		shouldFail        bool
 	}
 
 	newManager := func() *Manager {
 
-		objs := []runtime.Object{mutatingWebhookConfiguration, service}
-
-		client := fake.NewFakeClient(objs...)
-		manager := NewManager(client, mutatingWebhookConfiguration.ObjectMeta.Name, MutatingWebhook, time.Hour)
+		manager := NewManager(cli, expectedMutatingWebhookConfiguration.ObjectMeta.Name, MutatingWebhook, time.Hour)
 		err := manager.rotate()
-		if err != nil {
-			t.Fatalf("rotate (%v)", err)
-		}
+		ExpectWithOffset(1, err).To(Succeed(), "should success rotating certs")
+
 		return manager
 	}
-
-	loadSecret := func(manager *Manager) {
+	loadSecret := func(manager *Manager) corev1.Secret {
 		secretKey := types.NamespacedName{
-			Namespace: secret.ObjectMeta.Namespace,
-			Name:      secret.ObjectMeta.Name,
+			Namespace: expectedSecret.ObjectMeta.Namespace,
+			Name:      expectedSecret.ObjectMeta.Name,
 		}
-		err := manager.client.Get(context.TODO(), secretKey, &secret)
-		if err != nil {
-			t.Fatalf("loadSecret (%v)", err)
-		}
+		obtainedSecret := corev1.Secret{}
+		err := manager.client.Get(context.TODO(), secretKey, &obtainedSecret)
+		ExpectWithOffset(1, err).To(Succeed(), "should success getting secrets")
+		return obtainedSecret
+	}
+	updateSecret := func(manager *Manager, secretToUpdate *corev1.Secret) {
+		err := manager.client.Update(context.TODO(), secretToUpdate)
+		ExpectWithOffset(1, err).To(Succeed(), "should success updating secret")
 	}
 
-	updateSecret := func(manager *Manager) {
-		err := manager.client.Update(context.TODO(), &secret)
-		if err != nil {
-			t.Fatalf("updateSecret (%v)", err)
-		}
+	deleteSecret := func(manager *Manager, secretToDelete *corev1.Secret) {
+		err := manager.client.Delete(context.TODO(), secretToDelete)
+		ExpectWithOffset(1, err).To(Succeed(), "should success deleting secret")
 	}
 
-	deleteSecret := func(manager *Manager) {
-		err := manager.client.Delete(context.TODO(), &secret)
-		if err != nil {
-			t.Fatalf("deleteSecret (%v)", err)
-		}
-	}
-
-	loadMutatingWebhook := func(manager *Manager) {
+	loadMutatingWebhook := func(manager *Manager) admissionregistrationv1beta1.MutatingWebhookConfiguration {
 		webhookKey := types.NamespacedName{
-			Namespace: mutatingWebhookConfiguration.ObjectMeta.Namespace,
-			Name:      mutatingWebhookConfiguration.ObjectMeta.Name,
+			Namespace: expectedMutatingWebhookConfiguration.ObjectMeta.Namespace,
+			Name:      expectedMutatingWebhookConfiguration.ObjectMeta.Name,
 		}
-		err := manager.client.Get(context.TODO(), webhookKey, mutatingWebhookConfiguration)
-		if err != nil {
-			t.Fatalf("loadMutatingWebhook(%v)", err)
-		}
+		obtainedMutatingWebhookConfiguration := admissionregistrationv1beta1.MutatingWebhookConfiguration{}
+		err := manager.client.Get(context.TODO(), webhookKey, &obtainedMutatingWebhookConfiguration)
+		ExpectWithOffset(1, err).To(Succeed(), "should success getting mutatingwebhookconfiguration")
+		return obtainedMutatingWebhookConfiguration
 	}
 
-	updateMutatingWebhook := func(manager *Manager) {
-		err := manager.client.Update(context.TODO(), mutatingWebhookConfiguration)
-		if err != nil {
-			t.Fatalf("updateMutatingWebhook(%v)", err)
-		}
-	}
-	testCases := []struct {
-		name       string
-		test       func(manager *Manager)
-		shouldFail bool
-	}{
-		{"when rotate is call, should not fail", func(m *Manager) {}, false},
-		{"when secret deleted, should fail", func(m *Manager) {
-			deleteSecret(m)
-		}, true},
-		{"when secret's private key is removed, should fail", func(m *Manager) {
-			loadSecret(m)
-			delete(secret.Data, corev1.TLSPrivateKeyKey)
-			updateSecret(m)
-		}, true},
-		{"when secret's private key is not PEM, should fail", func(m *Manager) {
-			loadSecret(m)
-			secret.Data[corev1.TLSPrivateKeyKey] = []byte("This is not a PEM encoded key")
-			updateSecret(m)
-		}, true},
-		{"when secret's certificate is removed, should fail", func(m *Manager) {
-			loadSecret(m)
-			delete(secret.Data, corev1.TLSCertKey)
-			updateSecret(m)
-		}, true},
-		{"when secret's certificate is not PEM, should fail", func(m *Manager) {
-			loadSecret(m)
-			secret.Data[corev1.TLSCertKey] = []byte("This is not a PEM encoded key")
-			updateSecret(m)
-		}, true},
-		{"when mutatingWebhookConfiguration CABundle is removed, should fail", func(m *Manager) {
-			loadMutatingWebhook(m)
-			mutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = nil
-			updateMutatingWebhook(m)
-		}, true},
-		{"when mutatingWebhookConfiguration CABundle is empty, should fail", func(m *Manager) {
-			loadMutatingWebhook(m)
-			mutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = []byte{}
-			updateMutatingWebhook(m)
-		}, true},
-		{"when mutatingWebhookConfiguration CABundle is not PEM formated, should fail", func(m *Manager) {
-			loadMutatingWebhook(m)
-			mutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = []byte("This is not a CABundle PEM")
-			updateMutatingWebhook(m)
-		}, true},
+	updateMutatingWebhook := func(manager *Manager, mutatingWebhookConfigurationToUpdate *admissionregistrationv1beta1.MutatingWebhookConfiguration) {
+		err := manager.client.Update(context.TODO(), mutatingWebhookConfigurationToUpdate)
+		ExpectWithOffset(1, err).To(Succeed(), "should success updating mutatingwebhookconfiguration")
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	DescribeTable("VerifyTLS",
+		func(c verifyTLSTestCase) {
+			createResources()
+			defer deleteResources()
 			manager := newManager()
-			tc.test(manager)
+			c.certificatesChain(manager)
 			err := manager.verifyTLS()
-			if tc.shouldFail {
-				if err == nil {
-					t.Fatal("should fail")
-				}
+			if c.shouldFail {
+				Expect(err).To(HaveOccurred(), "should fail VerifyTLS")
 			} else {
-				if err != nil {
-					t.Fatalf("should not fail (%v)", err)
-				}
+				Expect(err).To(Succeed(), "should success VerifyTLS")
 			}
-		})
-	}
-}
+		},
+		Entry("when rotate is call, should not fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {},
+			shouldFail:        false,
+		}),
+
+		Entry("when secret deleted, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				deleteSecret(m, &expectedSecret)
+			},
+			shouldFail: true,
+		}),
+		Entry("when secret's private key is not PEM, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				obtainedSecret := loadSecret(m)
+				obtainedSecret.Data[corev1.TLSPrivateKeyKey] = []byte("This is not a PEM encoded key")
+				updateSecret(m, &obtainedSecret)
+			},
+			shouldFail: true,
+		}),
+		Entry("when secret's certificate is not PEM, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				obtainedSecret := loadSecret(m)
+				obtainedSecret.Data[corev1.TLSCertKey] = []byte("This is not a PEM encoded key")
+				updateSecret(m, &obtainedSecret)
+			},
+			shouldFail: true,
+		}),
+		Entry("when mutatingWebhookConfiguration CABundle is removed, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				obtainedMutatingWebhookConfiguration := loadMutatingWebhook(m)
+				obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = nil
+				updateMutatingWebhook(m, &obtainedMutatingWebhookConfiguration)
+			},
+			shouldFail: true,
+		}),
+		Entry("when mutatingWebhookConfiguration CABundle is empty, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				obtainedMutatingWebhookConfiguration := loadMutatingWebhook(m)
+				obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = []byte{}
+				updateMutatingWebhook(m, &obtainedMutatingWebhookConfiguration)
+			},
+			shouldFail: true,
+		}),
+		Entry("when mutatingWebhookConfiguration CABundle is not PEM formated, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				obtainedMutatingWebhookConfiguration := loadMutatingWebhook(m)
+				obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = []byte("This is not a CABundle PEM")
+				updateMutatingWebhook(m, &obtainedMutatingWebhookConfiguration)
+			},
+			shouldFail: true,
+		}),
+	)
+})

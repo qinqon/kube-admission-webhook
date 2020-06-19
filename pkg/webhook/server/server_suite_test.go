@@ -17,7 +17,7 @@ func init() {
 	logf.SetLogger(logf.ZapLogger(true))
 }
 
-func TestUnit(t *testing.T) {
+func TestServer(t *testing.T) {
 	RegisterFailHandler(Fail)
 	junitReporter := reporters.NewJUnitReporter("junit.server_suite_test.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "Server Test Suite", []Reporter{junitReporter})

@@ -11,6 +11,8 @@ export PATH := $(GOROOT)/bin:$(PATH)
 GO ?= $(GOBIN)/go
 GOFMT ?= $(GOBIN)/gofmt
 
+WHAT ?= ./pkg/...
+
 KUBEVIRT_PROVIDER=kind-k8s-1.14.2
 
 CLUSTER_DIR ?= kubevirtci/cluster-up/
@@ -48,8 +50,8 @@ vet: $(GO)
 testenv:
 	hack/setup-testenv.sh
 
-test: $(GO) vet format testenv
-	KUBEBUILDER_ASSETS=$(BIN_DIR) $(GO) test ./pkg/... -timeout 2m -ginkgo.v -ginkgo.noColor=true -test.v
+test: $(GO) testenv
+	KUBEBUILDER_ASSETS=$(BIN_DIR) $(GO) test $(WHAT) -timeout 2m -ginkgo.v -ginkgo.noColor=true -test.v
 
 pod:
 	$(GO) build -o $(BIN_DIR) ./pkg/... ./test/pod
