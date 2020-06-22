@@ -24,6 +24,7 @@ func (m *Manager) Add(mgr manager.Manager) error {
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func (m *Manager) add(mgr manager.Manager, r reconcile.Reconciler) error {
+	logger := m.log.WithName("add")
 	// Create a new controller
 	c, err := controller.New("certificate-controller", mgr, controller.Options{Reconciler: m})
 	if err != nil {
@@ -45,16 +46,20 @@ func (m *Manager) add(mgr manager.Manager, r reconcile.Reconciler) error {
 			return genericEvent.Meta.GetName() == m.webhookName
 		},
 	}
+
+	logger.Info("Starting to watch secrets")
 	err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, onEventForThisWebhook)
 	if err != nil {
 		return errors.Wrap(err, "failed watching Secret")
 	}
 
+	logger.Info("Starting to watch validatingwebhookconfiguration")
 	err = c.Watch(&source.Kind{Type: &admissionregistrationv1beta1.ValidatingWebhookConfiguration{}}, &handler.EnqueueRequestForObject{}, onEventForThisWebhook)
 	if err != nil {
 		return errors.Wrap(err, "failed watching ValidatingWebhookConfiguration")
 	}
 
+	logger.Info("Starting to watch mutatingwebhookconfiguration")
 	err = c.Watch(&source.Kind{Type: &admissionregistrationv1beta1.MutatingWebhookConfiguration{}}, &handler.EnqueueRequestForObject{}, onEventForThisWebhook)
 	if err != nil {
 		return errors.Wrap(err, "failed watching MutatingWebhookConfiguration")
