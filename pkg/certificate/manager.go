@@ -126,7 +126,16 @@ func (m *Manager) rotate() error {
 	}
 
 	for _, clientConfig := range m.clientConfigList(webhook) {
-		service := types.NamespacedName{Name: clientConfig.Service.Name, Namespace: clientConfig.Service.Namespace}
+
+		service := types.NamespacedName{
+			Name:      m.webhookName,
+			Namespace: "default",
+		}
+		if clientConfig.Service != nil {
+			service.Name = clientConfig.Service.Name
+			service.Namespace = clientConfig.Service.Namespace
+		}
+
 		keyPair, err := triple.NewServerKeyPair(
 			caKeyPair,
 			service.Name+"."+service.Namespace+".pod.cluster.local",
@@ -199,7 +208,19 @@ func (m *Manager) verifyTLS() error {
 	}
 
 	for _, clientConfig := range m.clientConfigList(webhookConf) {
-		secretKey := types.NamespacedName{Name: clientConfig.Service.Name, Namespace: clientConfig.Service.Namespace}
+		service := clientConfig.Service
+		secretKey := types.NamespacedName{}
+		if service != nil {
+			// If the webhook has a service then create the secret
+			// with same namespce and name
+			secretKey.Name = service.Name
+			secretKey.Namespace = service.Namespace
+		} else {
+			// If it uses directly URL create a secret with webhookName and
+			// default namespace
+			secretKey.Name = m.webhookName
+			secretKey.Namespace = "default"
+		}
 		err = m.verifyTLSSecret(secretKey, clientConfig.CABundle)
 		if err != nil {
 			return errors.Wrapf(err, "failed verifying TLS secret %s", secretKey)
