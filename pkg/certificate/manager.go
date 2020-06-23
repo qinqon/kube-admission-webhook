@@ -3,6 +3,8 @@ package certificate
 import (
 	"crypto/x509"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -127,13 +129,20 @@ func (m *Manager) rotate() error {
 
 	for _, clientConfig := range m.clientConfigList(webhook) {
 
-		service := types.NamespacedName{
-			Name:      m.webhookName,
-			Namespace: "default",
-		}
+		service := types.NamespacedName{}
+		hostnames := []string{}
+
 		if clientConfig.Service != nil {
 			service.Name = clientConfig.Service.Name
 			service.Namespace = clientConfig.Service.Namespace
+		} else if clientConfig.URL != nil {
+			service.Name = m.webhookName
+			service.Namespace = "default"
+			u, err := url.Parse(*clientConfig.URL)
+			if err != nil {
+				return errors.Wrapf(err, "failed parsing webhook URL %s", clientConfig.URL)
+			}
+			hostnames = append(hostnames, strings.Split(u.Host, ":")[0])
 		}
 
 		keyPair, err := triple.NewServerKeyPair(
@@ -143,7 +152,7 @@ func (m *Manager) rotate() error {
 			service.Namespace,
 			"cluster.local",
 			nil,
-			nil,
+			hostnames,
 			m.certsDuration,
 		)
 		if err != nil {
