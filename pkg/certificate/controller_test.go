@@ -12,6 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+
+	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
 )
 
 var (
@@ -25,6 +27,7 @@ var _ = Describe("Certificates controller", func() {
 		now           time.Time
 	)
 	BeforeEach(func() {
+
 		mgr = NewManager(cli, "foowebhook", MutatingWebhook, certsDuration)
 
 		// Freeze time
@@ -65,6 +68,7 @@ var _ = Describe("Certificates controller", func() {
 		)
 		BeforeEach(func() {
 			mgr.now = func() time.Time { return now }
+			triple.Now = mgr.now
 			var err error
 			currentResult, err = mgr.Reconcile(reconcile.Request{})
 			Expect(err).To(Succeed(), "should success reconciling")
@@ -79,6 +83,7 @@ var _ = Describe("Certificates controller", func() {
 			BeforeEach(func() {
 				previousResult = currentResult
 				mgr.now = func() time.Time { return now.Add(certsDuration / 2) }
+				triple.Now = mgr.now
 				var err error
 				currentResult, err = mgr.Reconcile(reconcile.Request{})
 				Expect(err).To(Succeed(), "should success reconciling")
@@ -95,6 +100,7 @@ var _ = Describe("Certificates controller", func() {
 					previousTLS = currentTLS
 					previousResult = currentResult
 					mgr.now = func() time.Time { return now.Add(time.Duration(float64(certsDuration) * 0.9)) }
+					triple.Now = mgr.now
 					var err error
 					currentResult, err = mgr.Reconcile(reconcile.Request{})
 					Expect(err).To(Succeed(), "should success reconciling")

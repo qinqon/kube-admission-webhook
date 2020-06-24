@@ -13,6 +13,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+
+	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
 )
 
 var _ = Describe("certificate manager", func() {
@@ -36,6 +38,7 @@ var _ = Describe("certificate manager", func() {
 				now: func() time.Time { return now },
 				log: log,
 			}
+			triple.Now = m.now
 			jitteryDuration = func(float64) time.Duration { return time.Duration(float64(notAfter.Sub(notBefore)) * 0.7) }
 			lowerBound := notBefore.Add(time.Duration(float64(notAfter.Sub(notBefore)) * 0.7))
 

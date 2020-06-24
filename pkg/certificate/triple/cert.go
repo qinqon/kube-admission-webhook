@@ -45,6 +45,10 @@ const (
 	rsaKeySize = 2048
 )
 
+var (
+	Now = func() time.Time { return time.Now() }
+)
+
 // Config contains the basic fields required for creating a certificate
 type Config struct {
 	CommonName   string
@@ -68,7 +72,7 @@ func NewPrivateKey() (*rsa.PrivateKey, error) {
 
 // NewSelfSignedCACert creates a CA certificate
 func NewSelfSignedCACert(cfg Config, key crypto.Signer, duration time.Duration) (*x509.Certificate, error) {
-	now := time.Now()
+	now := Now()
 	tmpl := x509.Certificate{
 		SerialNumber: new(big.Int).SetInt64(0),
 		Subject: pkix.Name{
@@ -81,7 +85,6 @@ func NewSelfSignedCACert(cfg Config, key crypto.Signer, duration time.Duration) 
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 	}
-
 	certDERBytes, err := x509.CreateCertificate(cryptorand.Reader, &tmpl, &tmpl, key.Public(), key)
 	if err != nil {
 		return nil, err
@@ -111,10 +114,11 @@ func NewSignedCert(cfg Config, key crypto.Signer, caCert *x509.Certificate, caKe
 		IPAddresses:  cfg.AltNames.IPs,
 		SerialNumber: serial,
 		NotBefore:    caCert.NotBefore,
-		NotAfter:     time.Now().Add(duration).UTC(),
+		NotAfter:     Now().Add(duration).UTC(),
 		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  cfg.Usages,
 	}
+
 	certDERBytes, err := x509.CreateCertificate(cryptorand.Reader, &certTmpl, caCert, key.Public(), caKey)
 	if err != nil {
 		return nil, err
@@ -157,8 +161,8 @@ func GenerateSelfSignedCertKey(host string, alternateIPs []net.IP, alternateDNS 
 // <host>_<ip>-<ip>_<alternateDNS>-<alternateDNS>.key
 // Certs/keys not existing in that directory are created.
 func GenerateSelfSignedCertKeyWithFixtures(host string, alternateIPs []net.IP, alternateDNS []string, fixtureDirectory string) ([]byte, []byte, error) {
-	validFrom := time.Now().Add(-time.Hour) // valid an hour earlier to avoid flakes due to clock skew
-	maxAge := time.Hour * 24 * 365          // one year self-signed certs
+	validFrom := Now().Add(-time.Hour) // valid an hour earlier to avoid flakes due to clock skew
+	maxAge := time.Hour * 24 * 365     // one year self-signed certs
 
 	baseName := fmt.Sprintf("%s_%s_%s", host, strings.Join(ipsToStrings(alternateIPs), "-"), strings.Join(alternateDNS, "-"))
 	certFixturePath := path.Join(fixtureDirectory, baseName+".crt")
@@ -183,7 +187,7 @@ func GenerateSelfSignedCertKeyWithFixtures(host string, alternateIPs []net.IP, a
 	caTemplate := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
-			CommonName: fmt.Sprintf("%s-ca@%d", host, time.Now().Unix()),
+			CommonName: fmt.Sprintf("%s-ca@%d", host, Now().Unix()),
 		},
 		NotBefore: validFrom,
 		NotAfter:  validFrom.Add(maxAge),
@@ -211,7 +215,7 @@ func GenerateSelfSignedCertKeyWithFixtures(host string, alternateIPs []net.IP, a
 	template := x509.Certificate{
 		SerialNumber: big.NewInt(2),
 		Subject: pkix.Name{
-			CommonName: fmt.Sprintf("%s@%d", host, time.Now().Unix()),
+			CommonName: fmt.Sprintf("%s@%d", host, Now().Unix()),
 		},
 		NotBefore: validFrom,
 		NotAfter:  validFrom.Add(maxAge),
@@ -290,8 +294,9 @@ func VerifyTLS(certsPEM, keyPEM, caBundle []byte) error {
 	}
 
 	opts := x509.VerifyOptions{
-		Roots:   cas,
-		DNSName: certs[0].DNSNames[0],
+		Roots:       cas,
+		DNSName:     certs[0].DNSNames[0],
+		CurrentTime: Now(),
 	}
 
 	if _, err := certs[0].Verify(opts); err != nil {

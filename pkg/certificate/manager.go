@@ -195,7 +195,7 @@ func (m *Manager) nextRotationDeadlineForCert(certificate *x509.Certificate) tim
 	totalDuration := float64(notAfter.Sub(certificate.NotBefore))
 	deadline := certificate.NotBefore.Add(jitteryDuration(totalDuration))
 
-	m.log.Info(fmt.Sprintf("Certificate expiration is %v, rotation deadline is %v", notAfter, deadline))
+	m.log.Info(fmt.Sprintf("Certificate expiration is %v, totalDuration is %v, rotation deadline is %v", notAfter, totalDuration, deadline))
 	return deadline
 }
 
