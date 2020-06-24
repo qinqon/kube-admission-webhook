@@ -140,7 +140,7 @@ func (m *Manager) rotate() error {
 			service.Namespace = "default"
 			u, err := url.Parse(*clientConfig.URL)
 			if err != nil {
-				return errors.Wrapf(err, "failed parsing webhook URL %s", clientConfig.URL)
+				return errors.Wrapf(err, "failed parsing webhook URL %s", *clientConfig.URL)
 			}
 			hostnames = append(hostnames, strings.Split(u.Host, ":")[0])
 		}
