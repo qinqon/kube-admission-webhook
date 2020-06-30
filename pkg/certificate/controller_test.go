@@ -145,7 +145,7 @@ var _ = Describe("Certificates controller", func() {
 
 			By("Creating new controller-runtime manager")
 			var err error
-			crManager, err = manager.New(testEnv.Config, manager.Options{Namespace: expectedNamespace.Name})
+			crManager, err = manager.New(testEnv.Config, manager.Options{Namespace: expectedNamespace.Name, MetricsBindAddress: "0"})
 			Expect(err).ToNot(HaveOccurred(), "should success creating controller-runtime manager")
 
 			err = mgr.Add(crManager)

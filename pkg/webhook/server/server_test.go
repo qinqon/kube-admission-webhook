@@ -40,7 +40,7 @@ var _ = Describe("Webhook server", func() {
 
 			By("Creating new controller-runtime manager")
 			var err error
-			mgr, err = manager.New(testEnv.Config, manager.Options{Namespace: expectedNamespace.Name})
+			mgr, err = manager.New(testEnv.Config, manager.Options{Namespace: expectedNamespace.Name, MetricsBindAddress: "0"})
 			Expect(err).ToNot(HaveOccurred(), "should success creating controller-runtime manager")
 
 			By("Creating the certDir")
