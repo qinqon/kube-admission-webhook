@@ -7,6 +7,7 @@ import (
 
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -31,19 +32,38 @@ func (m *Manager) add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return errors.Wrap(err, "failed instanciating certificate controller")
 	}
 
+	// Read the webhookconfiguration (mutating or validating)
+	webhookConfiguration, err := m.readyWebhookConfiguration()
+	if err != nil {
+		return errors.Wrapf(err, "failed to get %s webhook configuration %s to filter events", m.webhookType, m.webhookName)
+	}
+
+	// Get services name list from webhook configuration
+	servicesNamespaces := make(map[string]bool)
+	for _, clientConfig := range m.clientConfigList(webhookConfiguration) {
+		if clientConfig.Service != nil {
+			servicesNamespaces[clientConfig.Service.Namespace] = true
+		}
+	}
+
+	isWebhookConfigOrServiceNamespace := func(meta metav1.Object) bool {
+		_, found := servicesNamespaces[meta.GetNamespace()]
+		return meta.GetName() == m.webhookName || found
+	}
+
 	// Watch only events for selected m.webhookName
 	onEventForThisWebhook := predicate.Funcs{
 		CreateFunc: func(createEvent event.CreateEvent) bool {
-			return createEvent.Meta.GetName() == m.webhookName
+			return isWebhookConfigOrServiceNamespace(createEvent.Meta)
 		},
 		DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
-			return deleteEvent.Meta.GetName() == m.webhookName
+			return isWebhookConfigOrServiceNamespace(deleteEvent.Meta)
 		},
 		UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-			return updateEvent.MetaOld.GetName() == m.webhookName
+			return isWebhookConfigOrServiceNamespace(updateEvent.MetaOld)
 		},
 		GenericFunc: func(genericEvent event.GenericEvent) bool {
-			return genericEvent.Meta.GetName() == m.webhookName
+			return isWebhookConfigOrServiceNamespace(genericEvent.Meta)
 		},
 	}
 

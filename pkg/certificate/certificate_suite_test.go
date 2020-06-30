@@ -31,6 +31,21 @@ var (
 		},
 	}
 
+	expectedService = corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "foowebhook",
+			Name:      "foowebhook-service",
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				corev1.ServicePort{
+					Name: "https",
+					Port: 8443,
+				},
+			},
+		},
+	}
+
 	expectedMutatingWebhookConfiguration = admissionregistrationv1beta1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "foowebhook",
@@ -40,23 +55,9 @@ var (
 				Name: "foowebhook.qinqon.io",
 				ClientConfig: admissionregistrationv1beta1.WebhookClientConfig{
 					Service: &admissionregistrationv1beta1.ServiceReference{
-						Name:      "foowebhook",
-						Namespace: "foowebhook",
+						Name:      expectedService.Name,
+						Namespace: expectedService.Namespace,
 					},
-				},
-			},
-		},
-	}
-	expectedService = corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "foowebhook",
-			Name:      "foowebhook",
-		},
-		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{
-				corev1.ServicePort{
-					Name: "https",
-					Port: 8443,
 				},
 			},
 		},
