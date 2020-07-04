@@ -16,7 +16,15 @@ import (
 	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
 )
 
+const (
+	secretManagedAnnotatoinKey = "kubevirt.io/kube-admission-webhook"
+)
+
 func updateTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) *corev1.Secret {
+	if secret.Annotations == nil {
+		secret.Annotations = map[string]string{}
+	}
+	secret.Annotations[secretManagedAnnotatoinKey] = ""
 	secret.Data = map[string][]byte{
 		corev1.TLSCertKey:       triple.EncodeCertPEM(keyPair.Cert),
 		corev1.TLSPrivateKeyKey: triple.EncodePrivateKeyPEM(keyPair.Key),
@@ -61,8 +69,9 @@ func (m *Manager) newTLSSecret(secretKey types.NamespacedName, keyPair *triple.K
 
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretKey.Name,
-			Namespace: secretKey.Namespace,
+			Name:        secretKey.Name,
+			Namespace:   secretKey.Namespace,
+			Annotations: map[string]string{},
 		},
 	}
 

@@ -63,6 +63,7 @@ var _ = Describe("Certificates controller", func() {
 	})
 	type TLS struct {
 		caBundle, certificate, privateKey []byte
+		secretAnnotations                 map[string]string
 	}
 
 	getTLS := func() TLS {
@@ -80,9 +81,11 @@ var _ = Describe("Certificates controller", func() {
 		Expect(obtainedSecret.Data).ToNot(BeEmpty(), "should contain a secret with TLS key/cert")
 
 		return TLS{
-			caBundle:    cliConfig.CABundle,
-			certificate: expectedSecret.Data[corev1.TLSCertKey],
-			privateKey:  expectedSecret.Data[corev1.TLSPrivateKeyKey]}
+			caBundle:          cliConfig.CABundle,
+			certificate:       obtainedSecret.Data[corev1.TLSCertKey],
+			privateKey:        obtainedSecret.Data[corev1.TLSPrivateKeyKey],
+			secretAnnotations: obtainedSecret.Annotations,
+		}
 	}
 	Context("when reconcile is called for the fist time", func() {
 		var (
@@ -95,15 +98,16 @@ var _ = Describe("Certificates controller", func() {
 			var err error
 			currentResult, err = mgr.Reconcile(reconcile.Request{})
 			Expect(err).To(Succeed(), "should success reconciling")
-			previousTLS = getTLS()
+			currentTLS = getTLS()
 		})
 
-		It("should create TLS cert/key and return proper deadline", func() {
-			// First call for reconcile
+		It("should create TLS cert/key with proper annotation and return proper deadline", func() {
+			Expect(currentTLS.secretAnnotations).To(HaveKey(secretManagedAnnotatoinKey), "should be marked as managed by the kube-admission-webhook cert-manager")
 			Expect(currentResult.RequeueAfter).To(BeNumerically("<", certsDuration), "should requeue before expiration time")
 		})
 		Context("and then called in the middle of the deadline", func() {
 			BeforeEach(func() {
+				previousTLS = currentTLS
 				previousResult = currentResult
 				mgr.now = func() time.Time { return now.Add(certsDuration / 2) }
 				triple.Now = mgr.now
