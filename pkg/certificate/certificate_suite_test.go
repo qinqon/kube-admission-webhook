@@ -1,4 +1,4 @@
-package server
+package certificate
 
 import (
 	"context"
@@ -12,10 +12,9 @@ import (
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
@@ -31,10 +30,21 @@ var (
 			Name: "foowebhook",
 		},
 	}
-	selectedScope = admissionregistrationv1beta1.NamespacedScope
-	servicePath   = "/mutatepod"
-	failurePolicy = admissionregistrationv1beta1.Fail
-	mutatepodURL  = "https://localhost:8443/mutatepod"
+
+	expectedService = corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "foowebhook",
+			Name:      "foowebhook-service",
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				corev1.ServicePort{
+					Name: "https",
+					Port: 8443,
+				},
+			},
+		},
+	}
 
 	expectedMutatingWebhookConfiguration = admissionregistrationv1beta1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
@@ -44,20 +54,9 @@ var (
 			admissionregistrationv1beta1.MutatingWebhook{
 				Name: "foowebhook.qinqon.io",
 				ClientConfig: admissionregistrationv1beta1.WebhookClientConfig{
-					URL: &mutatepodURL,
-				},
-				FailurePolicy: &failurePolicy,
-				Rules: []admissionregistrationv1beta1.RuleWithOperations{
-					{
-						Rule: admissionregistrationv1beta1.Rule{
-							APIGroups:   []string{""},
-							APIVersions: []string{"v1"},
-							Resources:   []string{"pods"},
-							Scope:       &selectedScope,
-						},
-						Operations: []admissionregistrationv1beta1.OperationType{
-							admissionregistrationv1beta1.Create,
-						},
+					Service: &admissionregistrationv1beta1.ServiceReference{
+						Name:      expectedService.Name,
+						Namespace: expectedService.Namespace,
 					},
 				},
 			},
@@ -65,10 +64,7 @@ var (
 	}
 
 	expectedSecret = corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
-			Name:      "foowebhook",
-		},
+		ObjectMeta: expectedService.ObjectMeta,
 	}
 )
 
@@ -76,16 +72,17 @@ func createResources() {
 	err := cli.Create(context.TODO(), expectedMutatingWebhookConfiguration.DeepCopy())
 	ExpectWithOffset(1, err).ToNot(HaveOccurred(), "should success creating mutatingwebhookconfiguration")
 
+	err = cli.Create(context.TODO(), expectedService.DeepCopy())
+	ExpectWithOffset(1, err).ToNot(HaveOccurred(), "should success creating service")
 }
 
 func deleteResources() {
 	_ = cli.Delete(context.TODO(), &expectedMutatingWebhookConfiguration)
+	_ = cli.Delete(context.TODO(), &expectedService)
 	_ = cli.Delete(context.TODO(), &expectedSecret)
 }
 
 var _ = BeforeSuite(func() {
-
-	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
 
 	testEnv = &envtest.Environment{
 		UseExistingCluster: &useCluster,
@@ -119,8 +116,13 @@ var _ = AfterSuite(func() {
 	Expect(err).ToNot(HaveOccurred(), "should success stopping testenv")
 })
 
-func TestServer(t *testing.T) {
+func init() {
+	klog.InitFlags(nil)
+	logf.SetLogger(logf.ZapLogger(true))
+}
+
+func TestCertificate(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("junit.server.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "Server Test Suite", []Reporter{junitReporter, printer.NewlineReporter{}})
+	junitReporter := reporters.NewJUnitReporter("junit.certificate_suite_test.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "Certificate Test Suite", []Reporter{junitReporter})
 }
