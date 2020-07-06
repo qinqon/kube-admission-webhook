@@ -207,7 +207,7 @@ func (m *Manager) nextElapsedToRotate() time.Duration {
 	return elapsedToRotate
 }
 
-// checkTLS will verify that the caBundle and Secret are valid and can
+// verifyTLS will verify that the caBundle and Secret are valid and can
 // be used to verify
 func (m *Manager) verifyTLS() error {
 

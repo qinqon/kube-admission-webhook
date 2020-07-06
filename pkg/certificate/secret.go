@@ -80,7 +80,7 @@ func (m *Manager) newTLSSecret(secretKey types.NamespacedName, keyPair *triple.K
 		return nil, errors.Wrapf(err, "failed setting ownership to secret %s", secretKey)
 	}
 
-	return updateTLSSecret(secret, keyPair), nil
+	return &secret, nil
 }
 
 func (m *Manager) applyTLSSecret(service types.NamespacedName, keyPair *triple.KeyPair) error {
@@ -94,7 +94,7 @@ func (m *Manager) applyTLSSecret(service types.NamespacedName, keyPair *triple.K
 				if err != nil {
 					return errors.Wrapf(err, "failed initailizing secret %s", service)
 				}
-				return m.client.Create(context.TODO(), tlsSecret)
+				return m.client.Create(context.TODO(), updateTLSSecret(*tlsSecret, keyPair))
 			} else {
 				return err
 			}
@@ -103,7 +103,7 @@ func (m *Manager) applyTLSSecret(service types.NamespacedName, keyPair *triple.K
 	})
 }
 
-// checkTLS will verify that the caBundle and Secret are valid and can
+// verifyTLSSecret will verify that the caBundle and Secret are valid and can
 // be used to verify
 func (m *Manager) verifyTLSSecret(secretKey types.NamespacedName, caBundle []byte) error {
 	secret := corev1.Secret{}

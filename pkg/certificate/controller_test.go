@@ -87,7 +87,7 @@ var _ = Describe("Certificates controller", func() {
 			secretAnnotations: obtainedSecret.Annotations,
 		}
 	}
-	Context("when reconcile is called for the fist time", func() {
+	Context("when reconcile is called for the first time", func() {
 		var (
 			previousResult, currentResult reconcile.Result
 			previousTLS, currentTLS       TLS

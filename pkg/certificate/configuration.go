@@ -101,7 +101,7 @@ func (m *Manager) updateWebhookCABundle(caCert *x509.Certificate) (runtime.Objec
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to update validating webhook CABundle")
+		return nil, errors.Wrap(err, "failed to update webhook CABundle")
 	}
 	return webhook, nil
 }
