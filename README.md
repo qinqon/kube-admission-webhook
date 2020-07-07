@@ -6,6 +6,10 @@ The library generates RSA keys with 2048 size and certificate for both for CA an
 They share the expiration time so all the CA and service certificates
 are rotated at once just before expiration time.
 
+The CA bundle from webhook configuratin contains not only the last rotated
+CA certificate but also the non expired previous one, that prevents problems
+related to pods watching an old projection of the mounted secret.
+
 ## Webhook service
 It has a one year expiration time harcoded and apart from wrapping the
 controller runtime webhook library it waits for TLS key/cert existence and
