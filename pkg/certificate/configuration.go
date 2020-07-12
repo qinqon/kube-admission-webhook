@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -141,4 +143,35 @@ func (m *Manager) CABundle() ([]byte, error) {
 	}
 
 	return clientConfigList[0].CABundle, nil
+}
+
+// getServicesFromConfiguration it retrieves all the references services at
+// webhook configuration clientConfig and in case there is no service ref
+// it will refernece fake one with webhook name, default namespaces and
+// passing the url hostname at map value
+func (m *Manager) getServicesFromConfiguration(configuration runtime.Object) (map[types.NamespacedName][]string, error) {
+
+	services := map[types.NamespacedName][]string{}
+
+	for _, clientConfig := range m.clientConfigList(configuration) {
+
+		service := types.NamespacedName{}
+		hostnames := []string{}
+
+		if clientConfig.Service != nil {
+			service.Name = clientConfig.Service.Name
+			service.Namespace = clientConfig.Service.Namespace
+		} else if clientConfig.URL != nil {
+			service.Name = m.webhookName
+			service.Namespace = "default"
+			u, err := url.Parse(*clientConfig.URL)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed parsing webhook URL %s", *clientConfig.URL)
+			}
+			hostnames = append(hostnames, strings.Split(u.Host, ":")[0])
+		}
+
+		services[service] = hostnames
+	}
+	return services, nil
 }

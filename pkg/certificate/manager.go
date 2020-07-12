@@ -3,8 +3,6 @@ package certificate
 import (
 	"crypto/x509"
 	"fmt"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -137,24 +135,12 @@ func (m *Manager) rotate() error {
 		return errors.Wrap(err, "failed adding new CA cert to CA bundle at webhook")
 	}
 
-	for _, clientConfig := range m.clientConfigList(webhook) {
+	services, err := m.getServicesFromConfiguration(webhook)
+	if err != nil {
+		return errors.Wrap(err, "failed retrieving services from clientConfig")
+	}
 
-		service := types.NamespacedName{}
-		hostnames := []string{}
-
-		if clientConfig.Service != nil {
-			service.Name = clientConfig.Service.Name
-			service.Namespace = clientConfig.Service.Namespace
-		} else if clientConfig.URL != nil {
-			service.Name = m.webhookName
-			service.Namespace = "default"
-			u, err := url.Parse(*clientConfig.URL)
-			if err != nil {
-				return errors.Wrapf(err, "failed parsing webhook URL %s", *clientConfig.URL)
-			}
-			hostnames = append(hostnames, strings.Split(u.Host, ":")[0])
-		}
-
+	for service, hostnames := range services {
 		keyPair, err := triple.NewServerKeyPair(
 			caKeyPair,
 			service.Name+"."+service.Namespace+".pod.cluster.local",
@@ -172,6 +158,8 @@ func (m *Manager) rotate() error {
 		if err != nil {
 			return errors.Wrapf(err, "failed applying TLS secret %s", service)
 		}
+		// We have only
+		break
 	}
 
 	return nil
