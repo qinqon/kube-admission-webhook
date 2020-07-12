@@ -16,9 +16,24 @@ import (
 
 const (
 	secretManagedAnnotatoinKey = "kubevirt.io/kube-admission-webhook"
+	CACertKey                  = "ca.crt"
+	CAPrivateKeyKey            = "ca.key"
 )
 
-func updateTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) *corev1.Secret {
+func populateCASecret(secret corev1.Secret, keyPair *triple.KeyPair) *corev1.Secret {
+	if secret.Annotations == nil {
+		secret.Annotations = map[string]string{}
+	}
+	secret.Annotations[secretManagedAnnotatoinKey] = ""
+	secret.Data = map[string][]byte{
+		CACertKey:       triple.EncodeCertPEM(keyPair.Cert),
+		CAPrivateKeyKey: triple.EncodePrivateKeyPEM(keyPair.Key),
+	}
+	secret.Type = corev1.SecretTypeOpaque
+	return &secret
+}
+
+func populateTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) *corev1.Secret {
 	if secret.Annotations == nil {
 		secret.Annotations = map[string]string{}
 	}
@@ -31,36 +46,43 @@ func updateTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) *corev1.Secr
 	return &secret
 }
 
-func (m *Manager) newTLSSecret(secretKey types.NamespacedName, keyPair *triple.KeyPair) (*corev1.Secret, error) {
-
-	secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        secretKey.Name,
-			Namespace:   secretKey.Namespace,
-			Annotations: map[string]string{},
-		},
-	}
-
-	return &secret, nil
+func (m *Manager) applyTLSSecret(secret types.NamespacedName, keyPair *triple.KeyPair) error {
+	return m.applySecret(secret, keyPair, populateTLSSecret)
 }
 
-func (m *Manager) applyTLSSecret(service types.NamespacedName, keyPair *triple.KeyPair) error {
+func (m *Manager) applyCASecret(secret types.NamespacedName, keyPair *triple.KeyPair) error {
+	return m.applySecret(secret, keyPair, populateCASecret)
+}
+
+func (m *Manager) applySecret(secretKey types.NamespacedName, keyPair *triple.KeyPair,
+	populateSecretFn func(corev1.Secret, *triple.KeyPair) *corev1.Secret) error {
 	secret := corev1.Secret{}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		err := m.get(service, &secret)
+		err := m.get(secretKey, &secret)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				tlsSecret, err := m.newTLSSecret(service, keyPair)
-				if err != nil {
-					return errors.Wrapf(err, "failed initailizing secret %s", service)
+				newSecret := corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        secretKey.Name,
+						Namespace:   secretKey.Namespace,
+						Annotations: map[string]string{},
+					},
 				}
-				return m.client.Create(context.TODO(), updateTLSSecret(*tlsSecret, keyPair))
+				err = m.client.Create(context.TODO(), populateSecretFn(newSecret, keyPair))
+				if err != nil {
+					return errors.Wrap(err, "failed creating secret")
+				}
+				return nil
 			} else {
 				return err
 			}
 		}
-		return m.client.Update(context.TODO(), updateTLSSecret(secret, keyPair))
+		err = m.client.Update(context.TODO(), populateSecretFn(secret, keyPair))
+		if err != nil {
+			return errors.Wrap(err, "failed updating secret")
+		}
+		return nil
 	})
 }
 

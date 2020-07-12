@@ -18,13 +18,13 @@ import (
 )
 
 var _ = Describe("certificate manager", func() {
-	type setRotationDeadlineCase struct {
+	type nextRotationDeadlineForCertCase struct {
 		notBefore    time.Duration
 		notAfter     time.Duration
 		shouldRotate bool
 	}
-	DescribeTable("SetRotationDeadline",
-		func(c setRotationDeadlineCase) {
+	DescribeTable("nexrtRotationDeadlineForCert",
+		func(c nextRotationDeadlineForCertCase) {
 			log := logf.Log.WithName("webhook/server/certificate/manager_test")
 			now := time.Now()
 			notAfter := now.Add(c.notAfter)
@@ -47,42 +47,42 @@ var _ = Describe("certificate manager", func() {
 			Expect(deadline).To(Equal(lowerBound), fmt.Sprintf("should match deadline for notBefore %v and notAfter %v", notBefore, notAfter))
 
 		},
-		Entry("just issued, still good", setRotationDeadlineCase{
+		Entry("just issued, still good", nextRotationDeadlineForCertCase{
 			notBefore:    -1 * time.Hour,
 			notAfter:     99 * time.Hour,
 			shouldRotate: false,
 		}),
-		Entry("half way expired, still good", setRotationDeadlineCase{
+		Entry("half way expired, still good", nextRotationDeadlineForCertCase{
 			notBefore:    -24 * time.Hour,
 			notAfter:     24 * time.Hour,
 			shouldRotate: false,
 		}),
-		Entry("mostly expired, still good", setRotationDeadlineCase{
+		Entry("mostly expired, still good", nextRotationDeadlineForCertCase{
 			notBefore:    -69 * time.Hour,
 			notAfter:     31 * time.Hour,
 			shouldRotate: false,
 		}),
-		Entry("just about expired, should rotate", setRotationDeadlineCase{
+		Entry("just about expired, should rotate", nextRotationDeadlineForCertCase{
 			notBefore:    -91 * time.Hour,
 			notAfter:     9 * time.Hour,
 			shouldRotate: true,
 		}),
-		Entry("nearly expired, should rotate", setRotationDeadlineCase{
+		Entry("nearly expired, should rotate", nextRotationDeadlineForCertCase{
 			notBefore:    -99 * time.Hour,
 			notAfter:     1 * time.Hour,
 			shouldRotate: true,
 		}),
-		Entry("already expired, should rotate", setRotationDeadlineCase{
+		Entry("already expired, should rotate", nextRotationDeadlineForCertCase{
 			notBefore:    -10 * time.Hour,
 			notAfter:     -1 * time.Hour,
 			shouldRotate: true,
 		}),
-		Entry("long duration", setRotationDeadlineCase{
+		Entry("long duration", nextRotationDeadlineForCertCase{
 			notBefore:    -6 * 30 * 24 * time.Hour,
 			notAfter:     6 * 30 * 24 * time.Hour,
 			shouldRotate: true,
 		}),
-		Entry("short duration", setRotationDeadlineCase{
+		Entry("short duration", nextRotationDeadlineForCertCase{
 			notBefore:    -30 * time.Second,
 			notAfter:     30 * time.Second,
 			shouldRotate: true,

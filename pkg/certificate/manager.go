@@ -158,8 +158,6 @@ func (m *Manager) rotate() error {
 		if err != nil {
 			return errors.Wrapf(err, "failed applying TLS secret %s", service)
 		}
-		// We have only
-		break
 	}
 
 	return nil
