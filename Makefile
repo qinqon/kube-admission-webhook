@@ -51,7 +51,7 @@ testenv:
 	hack/setup-testenv.sh
 
 test: $(GO) testenv
-	KUBEBUILDER_ASSETS=$(BIN_DIR) $(GO) test $(WHAT) -timeout 2m -ginkgo.v -ginkgo.noColor=true -test.v
+	KUBEBUILDER_ASSETS=$(BIN_DIR) $(GO) test $(WHAT) -timeout 2m -ginkgo.v -ginkgo.noColor=false  -test.v
 
 pod:
 	$(GO) build -o $(BIN_DIR) ./pkg/... ./test/pod

@@ -30,7 +30,7 @@ var _ = Describe("Certificates controller", func() {
 		isTLSEventuallyVerified = func() AsyncAssertion {
 			return Eventually(func() error {
 				return mgr.verifyTLS()
-			}, 5*time.Second, 1*time.Second)
+			}, 20*time.Second, 1*time.Second)
 		}
 
 		isTLSSecretEventuallyPresent = func() AsyncAssertion {
@@ -44,7 +44,7 @@ var _ = Describe("Certificates controller", func() {
 					return false, err
 				}
 				return true, nil
-			}, 5*time.Second, 1*time.Second)
+			}, 20*time.Second, 1*time.Second)
 		}
 	)
 
@@ -109,7 +109,8 @@ var _ = Describe("Certificates controller", func() {
 			BeforeEach(func() {
 				previousTLS = currentTLS
 				previousResult = currentResult
-				mgr.now = func() time.Time { return now.Add(certsDuration / 2) }
+				now = mgr.now().Add(certsDuration / 2)
+				mgr.now = func() time.Time { return now }
 				triple.Now = mgr.now
 				var err error
 				currentResult, err = mgr.Reconcile(reconcile.Request{})
@@ -122,11 +123,13 @@ var _ = Describe("Certificates controller", func() {
 				Expect(currentTLS).To(Equal(previousTLS), "should not change TLS cert/key on reconcile in the middle of certificate duration")
 			})
 
-			Context("and finally called after 90%% of deadline", func() {
+			Context("and called at previous RequeueAfter (rotation deadline)", func() {
 				BeforeEach(func() {
 					previousTLS = currentTLS
 					previousResult = currentResult
-					mgr.now = func() time.Time { return now.Add(time.Duration(float64(certsDuration) * 0.9)) }
+					// Emulate controller-runtime timer by adding previous RequeueAfter values to previousNow
+					now = mgr.now().Add(previousResult.RequeueAfter)
+					mgr.now = func() time.Time { return now }
 					triple.Now = mgr.now
 					var err error
 					currentResult, err = mgr.Reconcile(reconcile.Request{})
@@ -134,9 +137,44 @@ var _ = Describe("Certificates controller", func() {
 					currentTLS = getTLS()
 				})
 				It("should rotate TLS cert/key and return a new deadline", func() {
-					Expect(currentTLS).ToNot(Equal(previousTLS), "should rotate TLS cert/key on Reconcile after deadline")
-					Expect(currentResult.RequeueAfter).To(BeNumerically(">", previousResult.RequeueAfter), "Second Reconcile not substracting now to deadline")
+					Expect(currentTLS.caBundle).ToNot(Equal(previousTLS.caBundle), "should have do a CA rotation")
+					Expect(currentTLS.certificate).ToNot(Equal(previousTLS.certificate), "should have do TLS cert rotation")
+					Expect(currentTLS.privateKey).ToNot(Equal(previousTLS.privateKey), "should have do a TLS key rotation")
+					Expect(currentTLS.secretAnnotations).To(Equal(previousTLS.secretAnnotations), "should containe same secret annotations")
+					elapsedForCleanup, err := mgr.earliestElapsedForCleanup()
+					Expect(err).To(Succeed(), "should succeed caslculating earliestElapsedForCleanup")
+					Expect(currentResult.RequeueAfter).To(Equal(elapsedForCleanup), "Reconcile at rotate should schedule next Reconcile to do the CA overlapping cleanup")
+
+					cas, err := triple.ParseCertsPEM(currentTLS.caBundle)
+					Expect(err).To(Succeed(), "should succeed parssing caBundle")
+					Expect(cas).To(HaveLen(2), "should overlap CAs")
 				})
+				Context("and called again at previous RequeueAfter (cleanup deadline)", func() {
+					BeforeEach(func() {
+						previousTLS = currentTLS
+						previousResult = currentResult
+						now = mgr.now().Add(previousResult.RequeueAfter)
+						mgr.now = func() time.Time { return now }
+						triple.Now = mgr.now
+						var err error
+						currentResult, err = mgr.Reconcile(reconcile.Request{})
+						Expect(err).To(Succeed(), "should success reconciling")
+						currentTLS = getTLS()
+					})
+					It("should remove expired CA certificates from caBundle", func() {
+						Expect(currentTLS.caBundle).ToNot(Equal(previousTLS.caBundle), "should have do a caBundle cleanup")
+						Expect(currentTLS.certificate).To(Equal(previousTLS.certificate), "should containe same TLS cert")
+						Expect(currentTLS.privateKey).To(Equal(previousTLS.privateKey), "should containe same TLS key")
+						Expect(currentTLS.secretAnnotations).To(Equal(previousTLS.secretAnnotations), "should containe same secret annotations")
+
+						cas, err := triple.ParseCertsPEM(currentTLS.caBundle)
+						Expect(err).To(Succeed(), "should succeed parssing caBundle")
+						Expect(cas).To(HaveLen(1), "should have cleandup CA bundle with expired certificates gone")
+
+						Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateFromLastDeadline()), "should schedule new Reconcile after ca overlapping cleanup to rotate current ca cert")
+					})
+				})
+
 			})
 		})
 	})
@@ -178,6 +216,7 @@ var _ = Describe("Certificates controller", func() {
 				By("Delete the TLS secret")
 				err := cli.Delete(context.TODO(), &expectedSecret)
 				Expect(err).To(Succeed(), "should succeed deleteing TLS secret")
+				By("Checking that the TLS secret is deleted")
 				isTLSSecretEventuallyPresent().Should(BeFalse(), "should eventually delete the TLS secret")
 			})
 			It("should re-create TLS secret", func() {
