@@ -1,8 +1,5 @@
-v0.9.0
+v0.10.0
 
 Features:
-* Implement certificate manager as a controller (#20)
-* Replace FakeClient with controller-runtime envtest (#24)
-* Move unit tests to ginkgo (#26)
-* Bump controller-runtime to v0.6.0 (#25)
-* introducing a script to force rotate the kube-admission caBundle and secrets (#21)
+* Replace CA bundle update strategy from replace to append (#28)
+* Add  CARotationInverval knob (#29)
