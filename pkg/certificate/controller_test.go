@@ -32,19 +32,22 @@ var _ = Describe("Certificates controller", func() {
 				return mgr.verifyTLS()
 			}, 20*time.Second, 1*time.Second)
 		}
-
-		isTLSSecretEventuallyPresent = func() AsyncAssertion {
-			return Eventually(func() (bool, error) {
-				obtainedSecret := corev1.Secret{}
-				err := cli.Get(context.TODO(), types.NamespacedName{Namespace: expectedSecret.Namespace, Name: expectedSecret.Name}, &obtainedSecret)
-				if err != nil {
-					if apierrors.IsNotFound(err) {
-						return false, nil
-					}
-					return false, err
+		isTLSSecretPresent = func() (bool, error) {
+			obtainedSecret := corev1.Secret{}
+			err := cli.Get(context.TODO(), types.NamespacedName{Namespace: expectedSecret.Namespace, Name: expectedSecret.Name}, &obtainedSecret)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					return false, nil
 				}
-				return true, nil
-			}, 20*time.Second, 1*time.Second)
+				return false, err
+			}
+			return true, nil
+		}
+		isTLSSecretEventuallyPresent = func() AsyncAssertion {
+			return Eventually(isTLSSecretPresent, 20*time.Second, 1*time.Second)
+		}
+		isTLSSecretConsistentlyPresent = func() AsyncAssertion {
+			return Consistently(isTLSSecretPresent, 5*time.Second, 1*time.Second)
 		}
 	)
 
@@ -223,6 +226,31 @@ var _ = Describe("Certificates controller", func() {
 				isTLSEventuallyVerified().Should(Succeed(), "should eventually have a TLS secret")
 			})
 		})
+		Context("and TLS secret is deleted using cascade deletion", func() {
+			BeforeEach(func() {
+				// Emulate cascade deletion by breaking ownership and
+				// setting it to a non existing one
+				By("Break TLS secret ownership")
+				obtainedSecret := corev1.Secret{}
+				err := cli.Get(context.TODO(), types.NamespacedName{Namespace: expectedSecret.Namespace, Name: expectedSecret.Name}, &obtainedSecret)
+				Expect(err).To(Succeed(), "should succeed getting the secret")
+				obtainedSecret.OwnerReferences[0].Name = "bad-service"
+				err = cli.Update(context.TODO(), &obtainedSecret)
+				Expect(err).To(Succeed(), "should succeed updating the TLS secret")
+
+				By("Wait a little for Reconcile to settle after updating secret")
+				time.Sleep(3 * time.Second)
+
+				By("Delete the TLS secret")
+				err = cli.Delete(context.TODO(), &obtainedSecret)
+				Expect(err).To(Succeed(), "should succeed deleting TLS secret")
+				isTLSSecretEventuallyPresent().Should(BeFalse(), "should eventually delete the TLS secret")
+			})
+			It("should not re-create the TLS secret", func() {
+				isTLSSecretConsistentlyPresent().Should(BeFalse(), "should not re-create the TLS secret")
+			})
+		})
+
 		Context("and CABundle is reset", func() {
 			BeforeEach(func() {
 				obtainedWebhookConfiguration := getWebhookConfiguration()
