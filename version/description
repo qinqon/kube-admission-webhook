@@ -1,5 +1,5 @@
-v0.10.0
+v0.11.0
 
 Features:
-* Replace CA bundle update strategy from replace to append (#28)
-* Add  CARotationInverval knob (#29)
+* Remove secret's ownership (#32)
+
