@@ -23,7 +23,7 @@ var _ = Describe("certificate manager", func() {
 		notAfter     time.Duration
 		shouldRotate bool
 	}
-	DescribeTable("nexrtRotationDeadlineForCert",
+	DescribeTable("nextRotationDeadlineForCert",
 		func(c nextRotationDeadlineForCertCase) {
 			log := logf.Log.WithName("webhook/server/certificate/manager_test")
 			now := time.Now()
@@ -97,7 +97,7 @@ var _ = Describe("certificate manager", func() {
 	newManager := func() *Manager {
 
 		manager := NewManager(cli, expectedMutatingWebhookConfiguration.ObjectMeta.Name, MutatingWebhook, time.Hour)
-		err := manager.rotate()
+		err := manager.rotateAll()
 		ExpectWithOffset(1, err).To(Succeed(), "should success rotating certs")
 
 		return manager

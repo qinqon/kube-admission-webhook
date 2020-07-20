@@ -121,23 +121,50 @@ func (m *Manager) getLastAppendedCACertFromCABundle() (*x509.Certificate, error)
 	return cas[len(cas)-1], nil
 }
 
-func (m *Manager) rotate() error {
-
-	m.log.Info("Rotating TLS cert/key")
+func (m *Manager) rotateAll() error {
+	m.log.Info("Rotating CA cert/key")
 
 	caKeyPair, err := triple.NewCA(m.webhookName, m.certsDuration)
 	if err != nil {
 		return errors.Wrap(err, "failed generating CA cert/key")
 	}
 
-	webhook, err := m.addCertificateToCABundle(caKeyPair.Cert)
+	err = m.addCertificateToCABundle(caKeyPair.Cert)
 	if err != nil {
 		return errors.Wrap(err, "failed adding new CA cert to CA bundle at webhook")
+	}
+
+	//FIXME: Is this default/webhookname good key for ca secret
+	caSecretKey := types.NamespacedName{Namespace: "default", Name: m.webhookName}
+	err = m.applyCASecret(caSecretKey, caKeyPair)
+	if err != nil {
+		return errors.Wrap(err, "failed storing CA cert/key at secret")
+	}
+
+	err = m.rotateServices()
+	if err != nil {
+		return errors.Wrap(err, "failed rotating services")
+	}
+
+	return nil
+}
+
+func (m *Manager) rotateServices() error {
+	m.log.Info("Rotating CA cert/key")
+
+	webhook, err := m.readyWebhookConfiguration()
+	if err != nil {
+		return errors.Wrap(err, "failed reading webhook configuration at services rotation")
 	}
 
 	services, err := m.getServicesFromConfiguration(webhook)
 	if err != nil {
 		return errors.Wrap(err, "failed retrieving services from clientConfig")
+	}
+
+	caKeyPair, err := m.getCAKeyPair()
+	if err != nil {
+		return errors.Wrap(err, "failed getting CA key pair")
 	}
 
 	for service, hostnames := range services {

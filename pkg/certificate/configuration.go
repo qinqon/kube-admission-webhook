@@ -80,9 +80,9 @@ func (m *Manager) readyWebhookConfiguration() (runtime.Object, error) {
 	return webhook, err
 }
 
-func (m *Manager) addCertificateToCABundle(caCert *x509.Certificate) (runtime.Object, error) {
+func (m *Manager) addCertificateToCABundle(caCert *x509.Certificate) error {
 	m.log.Info("Reset CA bundle with one cert for webhook")
-	webhook, err := m.updateWebhookCABundleWithFunc(func(currentCABundle []byte) ([]byte, error) {
+	_, err := m.updateWebhookCABundleWithFunc(func(currentCABundle []byte) ([]byte, error) {
 		cas := []*x509.Certificate{}
 		if len(currentCABundle) > 0 {
 			var err error
@@ -95,9 +95,9 @@ func (m *Manager) addCertificateToCABundle(caCert *x509.Certificate) (runtime.Ob
 		return triple.EncodeCertsPEM(cas), nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to update webhook CABundle")
+		return errors.Wrap(err, "failed to update webhook CABundle")
 	}
-	return webhook, nil
+	return nil
 }
 
 func (m *Manager) updateWebhookCABundleWithFunc(updateCABundle func([]byte) ([]byte, error)) (runtime.Object, error) {

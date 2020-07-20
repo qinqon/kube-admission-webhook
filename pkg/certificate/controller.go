@@ -106,7 +106,7 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 
 		// If rotate fails runtime-controller manager will re-enqueue it, so
 		// it will be retried
-		err := m.rotate()
+		err := m.rotateAll()
 		if err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "failed rotating certs")
 		}

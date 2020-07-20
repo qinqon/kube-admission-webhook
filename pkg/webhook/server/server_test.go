@@ -114,7 +114,7 @@ var _ = Describe("Webhook server", func() {
 					}
 					return false, err
 				}
-				return true, nil
+				return len(obtainedSecret.Data[corev1.TLSCertKey]) > 0 && len(obtainedSecret.Data[corev1.TLSPrivateKeyKey]) > 0, nil
 			}, 5*time.Second, 1*time.Second).Should(BeTrue(), "should eventually have a TLS secret")
 
 			By("Dump tls.key and tls.crt into webhook server certDir")

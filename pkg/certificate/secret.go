@@ -2,6 +2,7 @@ package certificate
 
 import (
 	"context"
+	"crypto/rsa"
 
 	"github.com/pkg/errors"
 
@@ -29,7 +30,6 @@ func populateCASecret(secret corev1.Secret, keyPair *triple.KeyPair) *corev1.Sec
 		CACertKey:       triple.EncodeCertPEM(keyPair.Cert),
 		CAPrivateKeyKey: triple.EncodePrivateKeyPEM(keyPair.Key),
 	}
-	secret.Type = corev1.SecretTypeOpaque
 	return &secret
 }
 
@@ -42,19 +42,18 @@ func populateTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) *corev1.Se
 		corev1.TLSCertKey:       triple.EncodeCertPEM(keyPair.Cert),
 		corev1.TLSPrivateKeyKey: triple.EncodePrivateKeyPEM(keyPair.Key),
 	}
-	secret.Type = corev1.SecretTypeTLS
 	return &secret
 }
 
 func (m *Manager) applyTLSSecret(secret types.NamespacedName, keyPair *triple.KeyPair) error {
-	return m.applySecret(secret, keyPair, populateTLSSecret)
+	return m.applySecret(secret, corev1.SecretTypeTLS, keyPair, populateTLSSecret)
 }
 
 func (m *Manager) applyCASecret(secret types.NamespacedName, keyPair *triple.KeyPair) error {
-	return m.applySecret(secret, keyPair, populateCASecret)
+	return m.applySecret(secret, corev1.SecretTypeOpaque, keyPair, populateCASecret)
 }
 
-func (m *Manager) applySecret(secretKey types.NamespacedName, keyPair *triple.KeyPair,
+func (m *Manager) applySecret(secretKey types.NamespacedName, secretType corev1.SecretType, keyPair *triple.KeyPair,
 	populateSecretFn func(corev1.Secret, *triple.KeyPair) *corev1.Secret) error {
 	secret := corev1.Secret{}
 
@@ -68,6 +67,7 @@ func (m *Manager) applySecret(secretKey types.NamespacedName, keyPair *triple.Ke
 						Namespace:   secretKey.Namespace,
 						Annotations: map[string]string{},
 					},
+					Type: secretType,
 				}
 				err = m.client.Create(context.TODO(), populateSecretFn(newSecret, keyPair))
 				if err != nil {
@@ -111,4 +111,34 @@ func (m *Manager) verifyTLSSecret(secretKey types.NamespacedName, caBundle []byt
 	}
 
 	return nil
+}
+
+func (m *Manager) getCAKeyPair() (*triple.KeyPair, error) {
+	secret := corev1.Secret{}
+	caSecretKey := types.NamespacedName{Namespace: "default", Name: m.webhookName}
+	err := m.get(caSecretKey, &secret)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed reading ca secret %s", caSecretKey)
+	}
+
+	caPrivateKeyPEM, found := secret.Data[CAPrivateKeyKey]
+	if !found {
+		return nil, errors.Wrapf(err, "ca private key not found at secret %s", caSecretKey)
+	}
+
+	caCertPEM, found := secret.Data[CACertKey]
+	if !found {
+		return nil, errors.Wrapf(err, "ca cert not found at secret %s", caSecretKey)
+	}
+
+	caCerts, err := triple.ParseCertsPEM(caCertPEM)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed parsing ca cert PEM at secret %s", caSecretKey)
+	}
+
+	caPrivateKey, err := triple.ParsePrivateKeyPEM(caPrivateKeyPEM)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed parsing ca private key PEM at secret %s", caSecretKey)
+	}
+	return &triple.KeyPair{Key: caPrivateKey.(*rsa.PrivateKey), Cert: caCerts[0]}, nil
 }
