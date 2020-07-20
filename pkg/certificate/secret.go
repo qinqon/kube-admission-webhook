@@ -50,8 +50,8 @@ func (m *Manager) applyTLSSecret(secret types.NamespacedName, keyPair *triple.Ke
 	return m.applySecret(secret, corev1.SecretTypeTLS, keyPair, populateTLSSecret)
 }
 
-func (m *Manager) applyCASecret(secret types.NamespacedName, keyPair *triple.KeyPair) error {
-	return m.applySecret(secret, corev1.SecretTypeOpaque, keyPair, populateCASecret)
+func (m *Manager) applyCASecret(keyPair *triple.KeyPair) error {
+	return m.applySecret(m.caSecretKey(), corev1.SecretTypeOpaque, keyPair, populateCASecret)
 }
 
 func (m *Manager) applySecret(secretKey types.NamespacedName, secretType corev1.SecretType, keyPair *triple.KeyPair,
@@ -131,30 +131,63 @@ func (m *Manager) verifyTLSSecret(secretKey types.NamespacedName, caKeyPair *tri
 
 func (m *Manager) getCAKeyPair() (*triple.KeyPair, error) {
 	secret := corev1.Secret{}
-	caSecretKey := types.NamespacedName{Namespace: "default", Name: m.webhookName}
-	err := m.get(caSecretKey, &secret)
+	err := m.get(m.caSecretKey(), &secret)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed reading ca secret %s", caSecretKey)
+		return nil, errors.Wrapf(err, "failed reading ca secret %s", m.caSecretKey())
 	}
 
 	caPrivateKeyPEM, found := secret.Data[CAPrivateKeyKey]
 	if !found {
-		return nil, errors.Wrapf(err, "ca private key not found at secret %s", caSecretKey)
+		return nil, errors.Wrapf(err, "ca private key not found at secret %s", m.caSecretKey())
 	}
 
 	caCertPEM, found := secret.Data[CACertKey]
 	if !found {
-		return nil, errors.Wrapf(err, "ca cert not found at secret %s", caSecretKey)
+		return nil, errors.Wrapf(err, "ca cert not found at secret %s", m.caSecretKey())
 	}
 
 	caCerts, err := triple.ParseCertsPEM(caCertPEM)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed parsing ca cert PEM at secret %s", caSecretKey)
+		return nil, errors.Wrapf(err, "failed parsing ca cert PEM at secret %s", m.caSecretKey())
 	}
 
 	caPrivateKey, err := triple.ParsePrivateKeyPEM(caPrivateKeyPEM)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed parsing ca private key PEM at secret %s", caSecretKey)
+		return nil, errors.Wrapf(err, "failed parsing ca private key PEM at secret %s", m.caSecretKey())
 	}
 	return &triple.KeyPair{Key: caPrivateKey.(*rsa.PrivateKey), Cert: caCerts[0]}, nil
+}
+
+func (m *Manager) getTLSKeyPair(secretKey types.NamespacedName) (*triple.KeyPair, error) {
+	secret := corev1.Secret{}
+	err := m.get(secretKey, &secret)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed reading ca secret %s", secretKey)
+	}
+
+	privateKeyPEM, found := secret.Data[corev1.TLSPrivateKeyKey]
+	if !found {
+		return nil, errors.Wrapf(err, "TLS private key not found at secret %s", secretKey)
+	}
+
+	certPEM, found := secret.Data[corev1.TLSCertKey]
+	if !found {
+		return nil, errors.Wrapf(err, "TLS cert not found at secret %s", secretKey)
+	}
+
+	certs, err := triple.ParseCertsPEM(certPEM)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed parsing TLS cert PEM at secret %s", secretKey)
+	}
+
+	privateKey, err := triple.ParsePrivateKeyPEM(privateKeyPEM)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed parsing TLS private key PEM at secret %s", secretKey)
+	}
+	return &triple.KeyPair{Key: privateKey.(*rsa.PrivateKey), Cert: certs[0]}, nil
+}
+
+//FIXME: Is this default/webhookname good key for ca secret
+func (m *Manager) caSecretKey() types.NamespacedName {
+	return types.NamespacedName{Namespace: "default", Name: m.webhookName + "-ca"}
 }

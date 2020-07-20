@@ -116,7 +116,7 @@ var _ = Describe("certificate manager", func() {
 	loadCASecret := func(manager *Manager) corev1.Secret {
 		secretKey := types.NamespacedName{
 			Namespace: "default",
-			Name:      expectedMutatingWebhookConfiguration.Name,
+			Name:      expectedMutatingWebhookConfiguration.Name + "-ca",
 		}
 		obtainedSecret := corev1.Secret{}
 		err := manager.client.Get(context.TODO(), secretKey, &obtainedSecret)

@@ -103,6 +103,7 @@ var _ = Describe("Certificates controller", func() {
 
 		It("should create TLS cert/key with proper annotation and return proper deadline", func() {
 			Expect(currentTLS.secretAnnotations).To(HaveKey(secretManagedAnnotatoinKey), "should be marked as managed by the kube-admission-webhook cert-manager")
+			Expect(currentResult.RequeueAfter).To(BeNumerically(">", time.Duration(0)), "should not be zero")
 			Expect(currentResult.RequeueAfter).To(BeNumerically("<", certsDuration), "should requeue before expiration time")
 		})
 		Context("and then called in the middle of the deadline", func() {

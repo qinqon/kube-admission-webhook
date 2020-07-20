@@ -89,6 +89,7 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 	reqLogger.Info("Reconciling Certificates")
 
 	elapsedToRotate := m.elapsedToRotateFromLastDeadline()
+	elapsedToRotateServices := m.elapsedToRotateServicesFromLastDeadline()
 
 	// Ensure that this Reconcile is not called after bad changes at
 	// the certificate chain
@@ -101,14 +102,14 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 		}
 	}
 
-	// We have pass expiration time or it was forced
+	// We have pass expiration time for the CA
 	if elapsedToRotate <= 0 {
 
 		// If rotate fails runtime-controller manager will re-enqueue it, so
 		// it will be retried
 		err := m.rotateAll()
 		if err != nil {
-			return reconcile.Result{}, errors.Wrap(err, "failed rotating certs")
+			return reconcile.Result{}, errors.Wrap(err, "failed rotating all certs")
 		}
 
 		// Re-calculate elapsedToRotate since we have generated new
@@ -116,6 +117,21 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 		m.nextRotationDeadline()
 		elapsedToRotate = m.elapsedToRotateFromLastDeadline()
 
+		// Also recalculate it for serices certificate since they has changed
+		m.nextRotationDeadlineForServices()
+		elapsedToRotateServices = m.elapsedToRotateServicesFromLastDeadline()
+
+	} else if elapsedToRotateServices <= 0 {
+		// CA is ok but expiration but we have passed expiration time for service certificates
+		err := m.rotateServices()
+		if err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "failed rotating services certs")
+		}
+
+		// Re-calculate elapsedToRotateServices since we have generated new
+		// services certificates
+		m.nextRotationDeadlineForServices()
+		elapsedToRotateServices = m.elapsedToRotateServicesFromLastDeadline()
 	}
 
 	elapsedForCleanup, err := m.earliestElapsedForCleanup()
@@ -137,15 +153,21 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 		}
 	}
 
-	// Reconcile is needed if rotation or ca bundle cleanup is needed, so
-	// RequeueAfter return the one that is going to happen sooner.
-	requeueAfter := time.Duration(0)
-	if elapsedForCleanup < elapsedToRotate {
-		requeueAfter = elapsedForCleanup
-	} else {
-		requeueAfter = elapsedToRotate
-	}
+	// Return the event that is going to happend sonner all services certificates rotation,
+	// services certificate rotation or ca bundle cleanup
+	m.log.Info("Calculating RequeueAfter", "elapsedToRotate", elapsedToRotate, "elapsedToRotateServices", elapsedToRotateServices, "elapsedForCleanup", elapsedForCleanup)
+	requeueAfter := min(elapsedToRotate, elapsedToRotateServices, elapsedForCleanup)
 
 	m.log.Info(fmt.Sprintf("Certificates will be Reconcile on %s", m.now().Add(requeueAfter)))
 	return reconcile.Result{RequeueAfter: requeueAfter}, nil
+}
+
+func min(values ...time.Duration) time.Duration {
+	m := time.Duration(0)
+	for i, e := range values {
+		if i == 0 || e < m {
+			m = e
+		}
+	}
+	return m
 }

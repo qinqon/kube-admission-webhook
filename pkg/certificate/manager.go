@@ -39,6 +39,9 @@ type Manager struct {
 	// lastRotateDeadline store the value of last call from nextRotationDeadline
 	lastRotateDeadline *time.Time
 
+	// lastRotateDeadlineForServices store the value of last call from nextRotationDeadlineForServices
+	lastRotateDeadlineForServices *time.Time
+
 	// certsDuration configurated duration for CA and service certificates
 	// there is no distintion between the two to simplify manager logic
 	// and monitor only CA certificate.
@@ -134,9 +137,7 @@ func (m *Manager) rotateAll() error {
 		return errors.Wrap(err, "failed adding new CA cert to CA bundle at webhook")
 	}
 
-	//FIXME: Is this default/webhookname good key for ca secret
-	caSecretKey := types.NamespacedName{Namespace: "default", Name: m.webhookName}
-	err = m.applyCASecret(caSecretKey, caKeyPair)
+	err = m.applyCASecret(caKeyPair)
 	if err != nil {
 		return errors.Wrap(err, "failed storing CA cert/key at secret")
 	}
@@ -190,6 +191,42 @@ func (m *Manager) rotateServices() error {
 	return nil
 }
 
+// nextRotationDeadlineForService will look at the first service at
+// webhook configuration find the secret's TLS certificate and calculate
+// next deadline, looking at first serices is fine since they certificates
+// are created/rotated at the same time
+func (m *Manager) nextRotationDeadlineForServices() time.Time {
+	webhookConf, err := m.readyWebhookConfiguration()
+	if err != nil {
+		m.log.Info(fmt.Sprintf("failed getting webhook configuration, forcing rotation: %v", err))
+		return m.now()
+	}
+
+	services, err := m.getServicesFromConfiguration(webhookConf)
+	if err != nil {
+		m.log.Info(fmt.Sprintf("failed getting webhook configuration services, forcing rotation: %v", err))
+		return m.now()
+	}
+
+	// Iterate the `services` map to calculate deadline with the first
+	// occurrence
+	for service, _ := range services {
+
+		tlsKeyPair, err := m.getTLSKeyPair(service)
+		if err != nil {
+			m.log.Info(fmt.Sprintf("failed getting TLS keypair from service %s , forcing rotation: %v", service, err))
+			return m.now()
+		}
+
+		nextDeadline := m.nextRotationDeadlineForCert(tlsKeyPair.Cert)
+
+		// Store last calculated deadline to use it at Reconcile
+		m.lastRotateDeadlineForServices = &nextDeadline
+		return nextDeadline
+	}
+	return m.now()
+}
+
 // nextRotationDeadline returns a value for the threshold at which the
 // current certificate should be rotated, 80%+/-10% of the expiration of the
 // certificate or force rotation in case the certificate chain is faulty
@@ -240,6 +277,22 @@ func (m *Manager) elapsedToRotateFromLastDeadline() time.Duration {
 	now := m.now()
 	elapsedToRotate := deadline.Sub(now)
 	m.log.Info(fmt.Sprintf("elapsedToRotateFromLastDeadline {now: %s, deadline: %s, elapsedToRotate: %s}", now, deadline, elapsedToRotate))
+	return elapsedToRotate
+}
+
+func (m *Manager) elapsedToRotateServicesFromLastDeadline() time.Duration {
+	deadline := m.now()
+
+	// If deadline was previously calculated return it, else do the
+	// calculations
+	if m.lastRotateDeadlineForServices != nil {
+		deadline = *m.lastRotateDeadlineForServices
+	} else {
+		deadline = m.nextRotationDeadlineForServices()
+	}
+	now := m.now()
+	elapsedToRotate := deadline.Sub(now)
+	m.log.Info(fmt.Sprintf("elapsedToRotateServicesFromLastDeadline{now: %s, deadline: %s, elapsedToRotate: %s}", now, deadline, elapsedToRotate))
 	return elapsedToRotate
 }
 
