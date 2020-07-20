@@ -96,7 +96,7 @@ var _ = Describe("certificate manager", func() {
 
 	newManager := func() *Manager {
 
-		manager := NewManager(cli, expectedMutatingWebhookConfiguration.ObjectMeta.Name, MutatingWebhook, expectedNamespace.Name, time.Hour)
+		manager := NewManager(cli, expectedMutatingWebhookConfiguration.ObjectMeta.Name, MutatingWebhook, expectedNamespace.Name, time.Hour, time.Hour)
 		err := manager.rotateAll()
 		ExpectWithOffset(1, err).To(Succeed(), "should success rotating certs")
 

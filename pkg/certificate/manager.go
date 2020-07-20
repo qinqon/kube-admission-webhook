@@ -46,10 +46,13 @@ type Manager struct {
 	// lastRotateDeadlineForServices store the value of last call from nextRotationDeadlineForServices
 	lastRotateDeadlineForServices *time.Time
 
-	// certsDuration configurated duration for CA and service certificates
-	// there is no distintion between the two to simplify manager logic
-	// and monitor only CA certificate.
-	certsDuration time.Duration
+	// caCertDuration configurated duration for CA and certificate
+	caCertDuration time.Duration
+
+	// serviceCertDuration configurated duration for of service certificate
+	// the the webhook configuration is referencing different services all
+	// of them will share the same duration
+	serviceCertDuration time.Duration
 
 	// log initialized log that containes the webhook configuration name and
 	// namespace so it's easy to debug.
@@ -86,16 +89,18 @@ func NewManager(
 	webhookName string,
 	webhookType WebhookType,
 	namespace string,
-	certsDuration time.Duration,
+	caCertDuration time.Duration,
+	serviceCertDuration time.Duration,
 ) *Manager {
 
 	m := &Manager{
-		client:        client,
-		webhookName:   webhookName,
-		webhookType:   webhookType,
-		namespace:     namespace,
-		now:           time.Now,
-		certsDuration: certsDuration,
+		client:               client,
+		webhookName:          webhookName,
+		webhookType:          webhookType,
+		namespace:            namespace,
+		now:                  time.Now,
+		caCertDuration:       caCertDuration,
+		serviceCertDuration: serviceCertDuration,
 		log: logf.Log.WithName("certificate/manager").
 			WithValues("webhookType", webhookType, "webhookName", webhookName),
 	}
@@ -133,7 +138,7 @@ func (m *Manager) getLastAppendedCACertFromCABundle() (*x509.Certificate, error)
 func (m *Manager) rotateAll() error {
 	m.log.Info("Rotating CA cert/key")
 
-	caKeyPair, err := triple.NewCA(m.webhookName, m.certsDuration)
+	caKeyPair, err := triple.NewCA(m.webhookName, m.caCertDuration)
 	if err != nil {
 		return errors.Wrap(err, "failed generating CA cert/key")
 	}
@@ -183,7 +188,7 @@ func (m *Manager) rotateServices() error {
 			"cluster.local",
 			nil,
 			hostnames,
-			m.certsDuration,
+			m.serviceCertDuration,
 		)
 		if err != nil {
 			return errors.Wrapf(err, "failed creating server key/cert for service %+v", service)
