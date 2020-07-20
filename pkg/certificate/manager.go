@@ -252,6 +252,11 @@ func (m *Manager) verifyTLS() error {
 		return errors.Wrap(err, "failed to reading configuration")
 	}
 
+	caKeyPair, err := m.getCAKeyPair()
+	if err != nil {
+		return errors.Wrap(err, "failed getting CA keypair from secret to verify TLS")
+	}
+
 	for _, clientConfig := range m.clientConfigList(webhookConf) {
 		service := clientConfig.Service
 		secretKey := types.NamespacedName{}
@@ -266,7 +271,7 @@ func (m *Manager) verifyTLS() error {
 			secretKey.Name = m.webhookName
 			secretKey.Namespace = "default"
 		}
-		err = m.verifyTLSSecret(secretKey, clientConfig.CABundle)
+		err = m.verifyTLSSecret(secretKey, caKeyPair, clientConfig.CABundle)
 		if err != nil {
 			return errors.Wrapf(err, "failed verifying TLS secret %s", secretKey)
 		}

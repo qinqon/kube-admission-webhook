@@ -3,6 +3,7 @@ package certificate
 import (
 	"context"
 	"crypto/rsa"
+	"reflect"
 
 	"github.com/pkg/errors"
 
@@ -88,7 +89,7 @@ func (m *Manager) applySecret(secretKey types.NamespacedName, secretType corev1.
 
 // verifyTLSSecret will verify that the caBundle and Secret are valid and can
 // be used to verify
-func (m *Manager) verifyTLSSecret(secretKey types.NamespacedName, caBundle []byte) error {
+func (m *Manager) verifyTLSSecret(secretKey types.NamespacedName, caKeyPair *triple.KeyPair, caBundle []byte) error {
 	secret := corev1.Secret{}
 	err := m.get(secretKey, &secret)
 	if err != nil {
@@ -105,7 +106,22 @@ func (m *Manager) verifyTLSSecret(secretKey types.NamespacedName, caBundle []byt
 		return errors.New("TLS certs not found")
 	}
 
-	err = triple.VerifyTLS(certsPEM, keyPEM, []byte(caBundle))
+	certsFromCABundle, err := triple.ParseCertsPEM(caBundle)
+	if err != nil {
+		return errors.Wrap(err, "failed parsing CABundle as pem encoded certificates")
+	}
+
+	if len(certsFromCABundle) == 0 {
+		return errors.New("CA bundle has no certificates")
+	}
+
+	lastCertFromCABundle := certsFromCABundle[len(certsFromCABundle)-1]
+
+	if !reflect.DeepEqual(*lastCertFromCABundle, *caKeyPair.Cert) {
+		return errors.New("CA bundle and CA secret certificate are different")
+	}
+
+	err = triple.VerifyTLS(certsPEM, keyPEM, caBundle)
 	if err != nil {
 		return errors.Wrapf(err, "failed verifying TLS from server Secret %s", secretKey)
 	}

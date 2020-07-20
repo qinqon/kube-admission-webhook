@@ -102,7 +102,7 @@ var _ = Describe("certificate manager", func() {
 
 		return manager
 	}
-	loadSecret := func(manager *Manager) corev1.Secret {
+	loadServiceSecret := func(manager *Manager) corev1.Secret {
 		secretKey := types.NamespacedName{
 			Namespace: expectedSecret.ObjectMeta.Namespace,
 			Name:      expectedSecret.ObjectMeta.Name,
@@ -112,6 +112,18 @@ var _ = Describe("certificate manager", func() {
 		ExpectWithOffset(1, err).To(Succeed(), "should success getting secrets")
 		return obtainedSecret
 	}
+
+	loadCASecret := func(manager *Manager) corev1.Secret {
+		secretKey := types.NamespacedName{
+			Namespace: "default",
+			Name:      expectedMutatingWebhookConfiguration.Name,
+		}
+		obtainedSecret := corev1.Secret{}
+		err := manager.client.Get(context.TODO(), secretKey, &obtainedSecret)
+		ExpectWithOffset(1, err).To(Succeed(), "should success getting CA secrets")
+		return obtainedSecret
+	}
+
 	updateSecret := func(manager *Manager, secretToUpdate *corev1.Secret) {
 		err := manager.client.Update(context.TODO(), secretToUpdate)
 		ExpectWithOffset(1, err).To(Succeed(), "should success updating secret")
@@ -162,9 +174,16 @@ var _ = Describe("certificate manager", func() {
 			},
 			shouldFail: true,
 		}),
+		Entry("when CA secret deleted, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				deleteSecret(m, &expectedCASecret)
+			},
+			shouldFail: true,
+		}),
+
 		Entry("when secret's private key is not PEM, should fail", verifyTLSTestCase{
 			certificatesChain: func(m *Manager) {
-				obtainedSecret := loadSecret(m)
+				obtainedSecret := loadServiceSecret(m)
 				obtainedSecret.Data[corev1.TLSPrivateKeyKey] = []byte("This is not a PEM encoded key")
 				updateSecret(m, &obtainedSecret)
 			},
@@ -172,12 +191,31 @@ var _ = Describe("certificate manager", func() {
 		}),
 		Entry("when secret's certificate is not PEM, should fail", verifyTLSTestCase{
 			certificatesChain: func(m *Manager) {
-				obtainedSecret := loadSecret(m)
+				obtainedSecret := loadServiceSecret(m)
 				obtainedSecret.Data[corev1.TLSCertKey] = []byte("This is not a PEM encoded key")
 				updateSecret(m, &obtainedSecret)
 			},
 			shouldFail: true,
 		}),
+
+		Entry("when CA secret's private key is not PEM, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				obtainedSecret := loadCASecret(m)
+				obtainedSecret.Data[CAPrivateKeyKey] = []byte("This is not a PEM encoded key")
+				updateSecret(m, &obtainedSecret)
+			},
+			shouldFail: true,
+		}),
+
+		Entry("when CA secret's certificate is not PEM, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				obtainedSecret := loadCASecret(m)
+				obtainedSecret.Data[CACertKey] = []byte("This is not a PEM encoded key")
+				updateSecret(m, &obtainedSecret)
+			},
+			shouldFail: true,
+		}),
+
 		Entry("when mutatingWebhookConfiguration CABundle is removed, should fail", verifyTLSTestCase{
 			certificatesChain: func(m *Manager) {
 				obtainedMutatingWebhookConfiguration := loadMutatingWebhook(m)
@@ -198,6 +236,19 @@ var _ = Describe("certificate manager", func() {
 			certificatesChain: func(m *Manager) {
 				obtainedMutatingWebhookConfiguration := loadMutatingWebhook(m)
 				obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = []byte("This is not a CABundle PEM")
+				updateMutatingWebhook(m, &obtainedMutatingWebhookConfiguration)
+			},
+			shouldFail: true,
+		}),
+		Entry("when mutatingWebhookConfiguration CABundle last certificate is not the same as CA secret, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				hackedCA, err := triple.NewCA("hacked-ca", 100*OneYearDuration)
+				Expect(err).To(Succeed(), "should succeed creating new hacked CA")
+
+				obtainedMutatingWebhookConfiguration := loadMutatingWebhook(m)
+				caBundle := obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle
+				hackedCABundle := append(caBundle, triple.EncodeCertPEM(hackedCA.Cert)...)
+				obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = hackedCABundle
 				updateMutatingWebhook(m, &obtainedMutatingWebhookConfiguration)
 			},
 			shouldFail: true,
