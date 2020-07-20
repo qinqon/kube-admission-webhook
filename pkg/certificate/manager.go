@@ -32,6 +32,10 @@ type Manager struct {
 	// webhookType The Mutating or Validating Webhook configuration type
 	webhookType WebhookType
 
+	// The namespace where ca secret will be created or service secrets
+	// for ClientConfig that has URL instead of ServiceRef
+	namespace string
+
 	// now is an artifact to do some unit testing without waiting for
 	// expiration time.
 	now func() time.Time
@@ -81,6 +85,7 @@ func NewManager(
 	client client.Client,
 	webhookName string,
 	webhookType WebhookType,
+	namespace string,
 	certsDuration time.Duration,
 ) *Manager {
 
@@ -88,6 +93,7 @@ func NewManager(
 		client:        client,
 		webhookName:   webhookName,
 		webhookType:   webhookType,
+		namespace:     namespace,
 		now:           time.Now,
 		certsDuration: certsDuration,
 		log: logf.Log.WithName("certificate/manager").
@@ -320,9 +326,9 @@ func (m *Manager) verifyTLS() error {
 			secretKey.Namespace = service.Namespace
 		} else {
 			// If it uses directly URL create a secret with webhookName and
-			// default namespace
+			// mgr namespace
 			secretKey.Name = m.webhookName
-			secretKey.Namespace = "default"
+			secretKey.Namespace = m.namespace
 		}
 		err = m.verifyTLSSecret(secretKey, caKeyPair, clientConfig.CABundle)
 		if err != nil {

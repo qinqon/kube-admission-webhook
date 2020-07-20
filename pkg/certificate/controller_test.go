@@ -46,11 +46,25 @@ var _ = Describe("Certificates controller", func() {
 				return true, nil
 			}, 20*time.Second, 1*time.Second)
 		}
+
+		isCASecretEventuallyPresent = func() AsyncAssertion {
+			return Eventually(func() (bool, error) {
+				obtainedSecret := corev1.Secret{}
+				err := cli.Get(context.TODO(), types.NamespacedName{Namespace: expectedCASecret.Namespace, Name: expectedCASecret.Name}, &obtainedSecret)
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						return false, nil
+					}
+					return false, err
+				}
+				return true, nil
+			}, 20*time.Second, 1*time.Second)
+		}
 	)
 
 	BeforeEach(func() {
 
-		mgr = NewManager(cli, "foowebhook", MutatingWebhook, certsDuration)
+		mgr = NewManager(cli, expectedMutatingWebhookConfiguration.Name, MutatingWebhook, expectedNamespace.Name, certsDuration)
 
 		// Freeze time
 		now = time.Now()
@@ -188,7 +202,7 @@ var _ = Describe("Certificates controller", func() {
 
 			By("Creating new controller-runtime manager")
 			var err error
-			crManager, err = manager.New(testEnv.Config, manager.Options{Namespace: expectedNamespace.Name, MetricsBindAddress: "0"})
+			crManager, err = manager.New(testEnv.Config, manager.Options{MetricsBindAddress: "0"})
 			Expect(err).ToNot(HaveOccurred(), "should success creating controller-runtime manager")
 
 			err = mgr.Add(crManager)
@@ -224,6 +238,19 @@ var _ = Describe("Certificates controller", func() {
 				isTLSEventuallyVerified().Should(Succeed(), "should eventually have a TLS secret")
 			})
 		})
+		Context("and CA secret is deleted", func() {
+			BeforeEach(func() {
+				By("Delete the CA secret")
+				err := cli.Delete(context.TODO(), &expectedCASecret)
+				Expect(err).To(Succeed(), "should succeed deleteing CA secret")
+				By("Checking that the CA secret is deleted")
+				isCASecretEventuallyPresent().Should(BeFalse(), "should eventually delete the CA secret")
+			})
+			It("should re-create CA secret", func() {
+				isTLSEventuallyVerified().Should(Succeed(), "should eventually have a CA secret")
+			})
+		})
+
 		Context("and CABundle is reset", func() {
 			BeforeEach(func() {
 				obtainedWebhookConfiguration := getWebhookConfiguration()

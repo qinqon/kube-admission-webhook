@@ -40,7 +40,7 @@ var _ = Describe("Webhook server", func() {
 
 			By("Creating new controller-runtime manager")
 			var err error
-			mgr, err = manager.New(testEnv.Config, manager.Options{Namespace: expectedNamespace.Name, MetricsBindAddress: "0"})
+			mgr, err = manager.New(testEnv.Config, manager.Options{MetricsBindAddress: "0", Namespace: expectedNamespace.Name})
 			Expect(err).ToNot(HaveOccurred(), "should success creating controller-runtime manager")
 
 			By("Creating the certDir")
@@ -84,7 +84,7 @@ var _ = Describe("Webhook server", func() {
 				return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 			}
 
-			server := New(cli, expectedMutatingWebhookConfiguration.Name, certificate.MutatingWebhook, certificate.OneYearDuration,
+			server := New(cli, expectedMutatingWebhookConfiguration.Name, certificate.MutatingWebhook, expectedNamespace.Name, certificate.OneYearDuration,
 				WithCertDir(certDir),
 				WithPort(freePort),
 				WithHook("/mutatepod",
@@ -114,7 +114,13 @@ var _ = Describe("Webhook server", func() {
 					}
 					return false, err
 				}
-				return len(obtainedSecret.Data[corev1.TLSCertKey]) > 0 && len(obtainedSecret.Data[corev1.TLSPrivateKeyKey]) > 0, nil
+				if len(obtainedSecret.Data[corev1.TLSPrivateKeyKey]) == 0 {
+					return false, nil
+				}
+				if len(obtainedSecret.Data[corev1.TLSCertKey]) == 0 {
+					return false, nil
+				}
+				return true, nil
 			}, 5*time.Second, 1*time.Second).Should(BeTrue(), "should eventually have a TLS secret")
 
 			By("Dump tls.key and tls.crt into webhook server certDir")

@@ -189,5 +189,5 @@ func (m *Manager) getTLSKeyPair(secretKey types.NamespacedName) (*triple.KeyPair
 
 //FIXME: Is this default/webhookname good key for ca secret
 func (m *Manager) caSecretKey() types.NamespacedName {
-	return types.NamespacedName{Namespace: "default", Name: m.webhookName + "-ca"}
+	return types.NamespacedName{Namespace: m.namespace, Name: m.webhookName + "-ca"}
 }

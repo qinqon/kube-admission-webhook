@@ -69,7 +69,7 @@ var (
 
 	expectedCASecret = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
+			Namespace: expectedNamespace.Name,
 			Name:      expectedMutatingWebhookConfiguration.Name + "-ca",
 		},
 	}

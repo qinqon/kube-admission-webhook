@@ -147,7 +147,7 @@ func (m *Manager) CABundle() ([]byte, error) {
 
 // getServicesFromConfiguration it retrieves all the references services at
 // webhook configuration clientConfig and in case there is no service ref
-// it will refernece fake one with webhook name, default namespaces and
+// it will refernece fake one with webhook name, mgr namespace and
 // passing the url hostname at map value
 func (m *Manager) getServicesFromConfiguration(configuration runtime.Object) (map[types.NamespacedName][]string, error) {
 
@@ -166,7 +166,7 @@ func (m *Manager) getServicesFromConfiguration(configuration runtime.Object) (ma
 		} else if clientConfig.URL != nil {
 			logger.Info("Composing service name and namespace from URL", "URL", clientConfig.URL)
 			service.Name = m.webhookName
-			service.Namespace = "default"
+			service.Namespace = m.namespace
 			u, err := url.Parse(*clientConfig.URL)
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed parsing webhook URL %s", *clientConfig.URL)

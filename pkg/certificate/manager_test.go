@@ -96,7 +96,7 @@ var _ = Describe("certificate manager", func() {
 
 	newManager := func() *Manager {
 
-		manager := NewManager(cli, expectedMutatingWebhookConfiguration.ObjectMeta.Name, MutatingWebhook, time.Hour)
+		manager := NewManager(cli, expectedMutatingWebhookConfiguration.ObjectMeta.Name, MutatingWebhook, expectedNamespace.Name, time.Hour)
 		err := manager.rotateAll()
 		ExpectWithOffset(1, err).To(Succeed(), "should success rotating certs")
 
@@ -115,8 +115,8 @@ var _ = Describe("certificate manager", func() {
 
 	loadCASecret := func(manager *Manager) corev1.Secret {
 		secretKey := types.NamespacedName{
-			Namespace: "default",
-			Name:      expectedMutatingWebhookConfiguration.Name + "-ca",
+			Namespace: expectedCASecret.Namespace,
+			Name:      expectedCASecret.Name,
 		}
 		obtainedSecret := corev1.Secret{}
 		err := manager.client.Get(context.TODO(), secretKey, &obtainedSecret)
