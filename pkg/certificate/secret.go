@@ -130,18 +130,18 @@ func (m *Manager) verifyTLSSecret(secretKey types.NamespacedName, caKeyPair *tri
 }
 
 func (m *Manager) getCAKeyPair() (*triple.KeyPair, error) {
-	secret := corev1.Secret{}
-	err := m.get(m.caSecretKey(), &secret)
+	caSecret := corev1.Secret{}
+	err := m.get(m.caSecretKey(), &caSecret)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed reading ca secret %s", m.caSecretKey())
 	}
 
-	caPrivateKeyPEM, found := secret.Data[CAPrivateKeyKey]
+	caPrivateKeyPEM, found := caSecret.Data[CAPrivateKeyKey]
 	if !found {
 		return nil, errors.Wrapf(err, "ca private key not found at secret %s", m.caSecretKey())
 	}
 
-	caCertPEM, found := secret.Data[CACertKey]
+	caCertPEM, found := caSecret.Data[CACertKey]
 	if !found {
 		return nil, errors.Wrapf(err, "ca cert not found at secret %s", m.caSecretKey())
 	}
