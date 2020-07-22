@@ -88,22 +88,22 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 	reqLogger := m.log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Certificates")
 
-	elapsedToRotate := m.elapsedToRotateCAFromLastDeadline()
+	elapsedToRotateCA := m.elapsedToRotateCAFromLastDeadline()
 	elapsedToRotateServices := m.elapsedToRotateServicesFromLastDeadline()
 
 	// Ensure that this Reconcile is not called after bad changes at
 	// the certificate chain
-	if elapsedToRotate > 0 {
+	if elapsedToRotateCA > 0 {
 		err := m.verifyTLS()
 		if err != nil {
 			reqLogger.Info(fmt.Sprintf("TLS certificate chain failed verification, forcing rotation, err: %v", err))
 			// Force rotation
-			elapsedToRotate = 0
+			elapsedToRotateCA = 0
 		}
 	}
 
 	// We have pass expiration time for the CA
-	if elapsedToRotate <= 0 {
+	if elapsedToRotateCA <= 0 {
 
 		// If rotate fails runtime-controller manager will re-enqueue it, so
 		// it will be retried
@@ -115,7 +115,7 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 		// Re-calculate elapsedToRotate since we have generated new
 		// certificates
 		m.nextRotationDeadline()
-		elapsedToRotate = m.elapsedToRotateCAFromLastDeadline()
+		elapsedToRotateCA = m.elapsedToRotateCAFromLastDeadline()
 
 		// Also recalculate it for serices certificate since they has changed
 		m.nextRotationDeadlineForServices()
@@ -155,8 +155,8 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 
 	// Return the event that is going to happend sonner all services certificates rotation,
 	// services certificate rotation or ca bundle cleanup
-	m.log.Info("Calculating RequeueAfter", "elapsedToRotate", elapsedToRotate, "elapsedToRotateServices", elapsedToRotateServices, "elapsedForCleanup", elapsedForCleanup)
-	requeueAfter := min(elapsedToRotate, elapsedToRotateServices, elapsedForCleanup)
+	m.log.Info("Calculating RequeueAfter", "elapsedToRotateCA", elapsedToRotateCA, "elapsedToRotateServices", elapsedToRotateServices, "elapsedForCleanup", elapsedForCleanup)
+	requeueAfter := min(elapsedToRotateCA, elapsedToRotateServices, elapsedForCleanup)
 
 	m.log.Info(fmt.Sprintf("Certificates will be Reconcile on %s", m.now().Add(requeueAfter)))
 	return reconcile.Result{RequeueAfter: requeueAfter}, nil
