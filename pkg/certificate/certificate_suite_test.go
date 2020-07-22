@@ -66,6 +66,13 @@ var (
 	expectedSecret = corev1.Secret{
 		ObjectMeta: expectedService.ObjectMeta,
 	}
+
+	expectedCASecret = corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: expectedNamespace.Name,
+			Name:      expectedMutatingWebhookConfiguration.Name + "-ca",
+		},
+	}
 )
 
 func createResources() {

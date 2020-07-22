@@ -18,13 +18,13 @@ import (
 )
 
 var _ = Describe("certificate manager", func() {
-	type setRotationDeadlineCase struct {
+	type nextRotationDeadlineForCertCase struct {
 		notBefore    time.Duration
 		notAfter     time.Duration
 		shouldRotate bool
 	}
-	DescribeTable("SetRotationDeadline",
-		func(c setRotationDeadlineCase) {
+	DescribeTable("nextRotationDeadlineForCert",
+		func(c nextRotationDeadlineForCertCase) {
 			log := logf.Log.WithName("webhook/server/certificate/manager_test")
 			now := time.Now()
 			notAfter := now.Add(c.notAfter)
@@ -47,42 +47,42 @@ var _ = Describe("certificate manager", func() {
 			Expect(deadline).To(Equal(lowerBound), fmt.Sprintf("should match deadline for notBefore %v and notAfter %v", notBefore, notAfter))
 
 		},
-		Entry("just issued, still good", setRotationDeadlineCase{
+		Entry("just issued, still good", nextRotationDeadlineForCertCase{
 			notBefore:    -1 * time.Hour,
 			notAfter:     99 * time.Hour,
 			shouldRotate: false,
 		}),
-		Entry("half way expired, still good", setRotationDeadlineCase{
+		Entry("half way expired, still good", nextRotationDeadlineForCertCase{
 			notBefore:    -24 * time.Hour,
 			notAfter:     24 * time.Hour,
 			shouldRotate: false,
 		}),
-		Entry("mostly expired, still good", setRotationDeadlineCase{
+		Entry("mostly expired, still good", nextRotationDeadlineForCertCase{
 			notBefore:    -69 * time.Hour,
 			notAfter:     31 * time.Hour,
 			shouldRotate: false,
 		}),
-		Entry("just about expired, should rotate", setRotationDeadlineCase{
+		Entry("just about expired, should rotate", nextRotationDeadlineForCertCase{
 			notBefore:    -91 * time.Hour,
 			notAfter:     9 * time.Hour,
 			shouldRotate: true,
 		}),
-		Entry("nearly expired, should rotate", setRotationDeadlineCase{
+		Entry("nearly expired, should rotate", nextRotationDeadlineForCertCase{
 			notBefore:    -99 * time.Hour,
 			notAfter:     1 * time.Hour,
 			shouldRotate: true,
 		}),
-		Entry("already expired, should rotate", setRotationDeadlineCase{
+		Entry("already expired, should rotate", nextRotationDeadlineForCertCase{
 			notBefore:    -10 * time.Hour,
 			notAfter:     -1 * time.Hour,
 			shouldRotate: true,
 		}),
-		Entry("long duration", setRotationDeadlineCase{
+		Entry("long duration", nextRotationDeadlineForCertCase{
 			notBefore:    -6 * 30 * 24 * time.Hour,
 			notAfter:     6 * 30 * 24 * time.Hour,
 			shouldRotate: true,
 		}),
-		Entry("short duration", setRotationDeadlineCase{
+		Entry("short duration", nextRotationDeadlineForCertCase{
 			notBefore:    -30 * time.Second,
 			notAfter:     30 * time.Second,
 			shouldRotate: true,
@@ -96,13 +96,13 @@ var _ = Describe("certificate manager", func() {
 
 	newManager := func() *Manager {
 
-		manager := NewManager(cli, expectedMutatingWebhookConfiguration.ObjectMeta.Name, MutatingWebhook, time.Hour)
-		err := manager.rotate()
+		manager := NewManager(cli, expectedMutatingWebhookConfiguration.ObjectMeta.Name, MutatingWebhook, expectedNamespace.Name, time.Hour, time.Hour)
+		err := manager.rotateAll()
 		ExpectWithOffset(1, err).To(Succeed(), "should success rotating certs")
 
 		return manager
 	}
-	loadSecret := func(manager *Manager) corev1.Secret {
+	loadServiceSecret := func(manager *Manager) corev1.Secret {
 		secretKey := types.NamespacedName{
 			Namespace: expectedSecret.ObjectMeta.Namespace,
 			Name:      expectedSecret.ObjectMeta.Name,
@@ -112,6 +112,18 @@ var _ = Describe("certificate manager", func() {
 		ExpectWithOffset(1, err).To(Succeed(), "should success getting secrets")
 		return obtainedSecret
 	}
+
+	loadCASecret := func(manager *Manager) corev1.Secret {
+		secretKey := types.NamespacedName{
+			Namespace: expectedCASecret.Namespace,
+			Name:      expectedCASecret.Name,
+		}
+		obtainedSecret := corev1.Secret{}
+		err := manager.client.Get(context.TODO(), secretKey, &obtainedSecret)
+		ExpectWithOffset(1, err).To(Succeed(), "should success getting CA secrets")
+		return obtainedSecret
+	}
+
 	updateSecret := func(manager *Manager, secretToUpdate *corev1.Secret) {
 		err := manager.client.Update(context.TODO(), secretToUpdate)
 		ExpectWithOffset(1, err).To(Succeed(), "should success updating secret")
@@ -162,9 +174,16 @@ var _ = Describe("certificate manager", func() {
 			},
 			shouldFail: true,
 		}),
+		Entry("when CA secret deleted, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				deleteSecret(m, &expectedCASecret)
+			},
+			shouldFail: true,
+		}),
+
 		Entry("when secret's private key is not PEM, should fail", verifyTLSTestCase{
 			certificatesChain: func(m *Manager) {
-				obtainedSecret := loadSecret(m)
+				obtainedSecret := loadServiceSecret(m)
 				obtainedSecret.Data[corev1.TLSPrivateKeyKey] = []byte("This is not a PEM encoded key")
 				updateSecret(m, &obtainedSecret)
 			},
@@ -172,12 +191,31 @@ var _ = Describe("certificate manager", func() {
 		}),
 		Entry("when secret's certificate is not PEM, should fail", verifyTLSTestCase{
 			certificatesChain: func(m *Manager) {
-				obtainedSecret := loadSecret(m)
+				obtainedSecret := loadServiceSecret(m)
 				obtainedSecret.Data[corev1.TLSCertKey] = []byte("This is not a PEM encoded key")
 				updateSecret(m, &obtainedSecret)
 			},
 			shouldFail: true,
 		}),
+
+		Entry("when CA secret's private key is not PEM, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				obtainedSecret := loadCASecret(m)
+				obtainedSecret.Data[CAPrivateKeyKey] = []byte("This is not a PEM encoded key")
+				updateSecret(m, &obtainedSecret)
+			},
+			shouldFail: true,
+		}),
+
+		Entry("when CA secret's certificate is not PEM, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				obtainedSecret := loadCASecret(m)
+				obtainedSecret.Data[CACertKey] = []byte("This is not a PEM encoded key")
+				updateSecret(m, &obtainedSecret)
+			},
+			shouldFail: true,
+		}),
+
 		Entry("when mutatingWebhookConfiguration CABundle is removed, should fail", verifyTLSTestCase{
 			certificatesChain: func(m *Manager) {
 				obtainedMutatingWebhookConfiguration := loadMutatingWebhook(m)
@@ -198,6 +236,19 @@ var _ = Describe("certificate manager", func() {
 			certificatesChain: func(m *Manager) {
 				obtainedMutatingWebhookConfiguration := loadMutatingWebhook(m)
 				obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = []byte("This is not a CABundle PEM")
+				updateMutatingWebhook(m, &obtainedMutatingWebhookConfiguration)
+			},
+			shouldFail: true,
+		}),
+		Entry("when mutatingWebhookConfiguration CABundle last certificate is not the same as CA secret, should fail", verifyTLSTestCase{
+			certificatesChain: func(m *Manager) {
+				hackedCA, err := triple.NewCA("hacked-ca", 100*OneYearDuration)
+				Expect(err).To(Succeed(), "should succeed creating new hacked CA")
+
+				obtainedMutatingWebhookConfiguration := loadMutatingWebhook(m)
+				caBundle := obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle
+				hackedCABundle := append(caBundle, triple.EncodeCertPEM(hackedCA.Cert)...)
+				obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = hackedCABundle
 				updateMutatingWebhook(m, &obtainedMutatingWebhookConfiguration)
 			},
 			shouldFail: true,

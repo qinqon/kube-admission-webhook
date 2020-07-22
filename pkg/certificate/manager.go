@@ -3,8 +3,6 @@ package certificate
 import (
 	"crypto/x509"
 	"fmt"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -34,6 +32,10 @@ type Manager struct {
 	// webhookType The Mutating or Validating Webhook configuration type
 	webhookType WebhookType
 
+	// The namespace where ca secret will be created or service secrets
+	// for ClientConfig that has URL instead of ServiceRef
+	namespace string
+
 	// now is an artifact to do some unit testing without waiting for
 	// expiration time.
 	now func() time.Time
@@ -41,10 +43,16 @@ type Manager struct {
 	// lastRotateDeadline store the value of last call from nextRotationDeadline
 	lastRotateDeadline *time.Time
 
-	// certsDuration configurated duration for CA and service certificates
-	// there is no distintion between the two to simplify manager logic
-	// and monitor only CA certificate.
-	certsDuration time.Duration
+	// lastRotateDeadlineForServices store the value of last call from nextRotationDeadlineForServices
+	lastRotateDeadlineForServices *time.Time
+
+	// caCertDuration configurated duration for CA and certificate
+	caCertDuration time.Duration
+
+	// serviceCertDuration configurated duration for of service certificate
+	// the the webhook configuration is referencing different services all
+	// of them will share the same duration
+	serviceCertDuration time.Duration
 
 	// log initialized log that containes the webhook configuration name and
 	// namespace so it's easy to debug.
@@ -80,15 +88,19 @@ func NewManager(
 	client client.Client,
 	webhookName string,
 	webhookType WebhookType,
-	certsDuration time.Duration,
+	namespace string,
+	caCertDuration time.Duration,
+	serviceCertDuration time.Duration,
 ) *Manager {
 
 	m := &Manager{
-		client:        client,
-		webhookName:   webhookName,
-		webhookType:   webhookType,
-		now:           time.Now,
-		certsDuration: certsDuration,
+		client:              client,
+		webhookName:         webhookName,
+		webhookType:         webhookType,
+		namespace:           namespace,
+		now:                 time.Now,
+		caCertDuration:      caCertDuration,
+		serviceCertDuration: serviceCertDuration,
 		log: logf.Log.WithName("certificate/manager").
 			WithValues("webhookType", webhookType, "webhookName", webhookName),
 	}
@@ -123,38 +135,51 @@ func (m *Manager) getLastAppendedCACertFromCABundle() (*x509.Certificate, error)
 	return cas[len(cas)-1], nil
 }
 
-func (m *Manager) rotate() error {
+func (m *Manager) rotateAll() error {
+	m.log.Info("Rotating CA cert/key")
 
-	m.log.Info("Rotating TLS cert/key")
-
-	caKeyPair, err := triple.NewCA(m.webhookName, m.certsDuration)
+	caKeyPair, err := triple.NewCA(m.webhookName, m.caCertDuration)
 	if err != nil {
 		return errors.Wrap(err, "failed generating CA cert/key")
 	}
 
-	webhook, err := m.addCertificateToCABundle(caKeyPair.Cert)
+	err = m.addCertificateToCABundle(caKeyPair.Cert)
 	if err != nil {
 		return errors.Wrap(err, "failed adding new CA cert to CA bundle at webhook")
 	}
 
-	for _, clientConfig := range m.clientConfigList(webhook) {
+	err = m.applyCASecret(caKeyPair)
+	if err != nil {
+		return errors.Wrap(err, "failed storing CA cert/key at secret")
+	}
 
-		service := types.NamespacedName{}
-		hostnames := []string{}
+	err = m.rotateServices()
+	if err != nil {
+		return errors.Wrap(err, "failed rotating services")
+	}
 
-		if clientConfig.Service != nil {
-			service.Name = clientConfig.Service.Name
-			service.Namespace = clientConfig.Service.Namespace
-		} else if clientConfig.URL != nil {
-			service.Name = m.webhookName
-			service.Namespace = "default"
-			u, err := url.Parse(*clientConfig.URL)
-			if err != nil {
-				return errors.Wrapf(err, "failed parsing webhook URL %s", *clientConfig.URL)
-			}
-			hostnames = append(hostnames, strings.Split(u.Host, ":")[0])
-		}
+	return nil
+}
 
+func (m *Manager) rotateServices() error {
+	m.log.Info("Rotating Services cert/key")
+
+	webhook, err := m.readyWebhookConfiguration()
+	if err != nil {
+		return errors.Wrap(err, "failed reading webhook configuration at services rotation")
+	}
+
+	services, err := m.getServicesFromConfiguration(webhook)
+	if err != nil {
+		return errors.Wrap(err, "failed retrieving services from clientConfig")
+	}
+
+	caKeyPair, err := m.getCAKeyPair()
+	if err != nil {
+		return errors.Wrap(err, "failed getting CA key pair")
+	}
+
+	for service, hostnames := range services {
 		keyPair, err := triple.NewServerKeyPair(
 			caKeyPair,
 			service.Name+"."+service.Namespace+".pod.cluster.local",
@@ -163,7 +188,7 @@ func (m *Manager) rotate() error {
 			"cluster.local",
 			nil,
 			hostnames,
-			m.certsDuration,
+			m.serviceCertDuration,
 		)
 		if err != nil {
 			return errors.Wrapf(err, "failed creating server key/cert for service %+v", service)
@@ -175,6 +200,51 @@ func (m *Manager) rotate() error {
 	}
 
 	return nil
+}
+
+// nextRotationDeadlineForService will look at the first service at
+// webhook configuration find the secret's TLS certificate and calculate
+// next deadline, looking at first serices is fine since they certificates
+// are created/rotated at the same time
+func (m *Manager) nextRotationDeadlineForServices() time.Time {
+	webhookConf, err := m.readyWebhookConfiguration()
+	if err != nil {
+		m.log.Info(fmt.Sprintf("failed getting webhook configuration, forcing rotation: %v", err))
+		return m.now()
+	}
+
+	services, err := m.getServicesFromConfiguration(webhookConf)
+	if err != nil {
+		m.log.Info(fmt.Sprintf("failed getting webhook configuration services, forcing rotation: %v", err))
+		return m.now()
+	}
+
+	// Iterate the `services` to find the the certificate with a sooner
+	// expiration time
+	var nextToExpireServiceCert *x509.Certificate
+	for service, _ := range services {
+
+		tlsKeyPair, err := m.getTLSKeyPair(service)
+		if err != nil {
+			m.log.Info(fmt.Sprintf("failed getting TLS keypair from service %s , forcing rotation: %v", service, err))
+			return m.now()
+		}
+		if nextToExpireServiceCert == nil {
+			// First map element
+			nextToExpireServiceCert = tlsKeyPair.Cert
+		} else if nextToExpireServiceCert.NotAfter.After(tlsKeyPair.Cert.NotAfter) {
+			// iterated service cert will expire sooner let's select it
+			nextToExpireServiceCert = tlsKeyPair.Cert
+		}
+	}
+
+	nextDeadline := m.nextRotationDeadlineForCert(nextToExpireServiceCert)
+
+	// Store last calculated deadline to use it at Reconcile
+	m.lastRotateDeadlineForServices = &nextDeadline
+	return nextDeadline
+
+	return m.now()
 }
 
 // nextRotationDeadline returns a value for the threshold at which the
@@ -214,7 +284,7 @@ func (m *Manager) nextRotationDeadlineForCert(certificate *x509.Certificate) tim
 	return deadline
 }
 
-func (m *Manager) elapsedToRotateFromLastDeadline() time.Duration {
+func (m *Manager) elapsedToRotateCAFromLastDeadline() time.Duration {
 	deadline := m.now()
 
 	// If deadline was previously calculated return it, else do the
@@ -226,7 +296,23 @@ func (m *Manager) elapsedToRotateFromLastDeadline() time.Duration {
 	}
 	now := m.now()
 	elapsedToRotate := deadline.Sub(now)
-	m.log.Info(fmt.Sprintf("elapsedToRotateFromLastDeadline {now: %s, deadline: %s, elapsedToRotate: %s}", now, deadline, elapsedToRotate))
+	m.log.Info(fmt.Sprintf("elapsedToRotateCAFromLastDeadline {now: %s, deadline: %s, elapsedToRotate: %s}", now, deadline, elapsedToRotate))
+	return elapsedToRotate
+}
+
+func (m *Manager) elapsedToRotateServicesFromLastDeadline() time.Duration {
+	deadline := m.now()
+
+	// If deadline was previously calculated return it, else do the
+	// calculations
+	if m.lastRotateDeadlineForServices != nil {
+		deadline = *m.lastRotateDeadlineForServices
+	} else {
+		deadline = m.nextRotationDeadlineForServices()
+	}
+	now := m.now()
+	elapsedToRotate := deadline.Sub(now)
+	m.log.Info(fmt.Sprintf("elapsedToRotateServicesFromLastDeadline{now: %s, deadline: %s, elapsedToRotate: %s}", now, deadline, elapsedToRotate))
 	return elapsedToRotate
 }
 
@@ -239,6 +325,11 @@ func (m *Manager) verifyTLS() error {
 		return errors.Wrap(err, "failed to reading configuration")
 	}
 
+	caKeyPair, err := m.getCAKeyPair()
+	if err != nil {
+		return errors.Wrap(err, "failed getting CA keypair from secret to verify TLS")
+	}
+
 	for _, clientConfig := range m.clientConfigList(webhookConf) {
 		service := clientConfig.Service
 		secretKey := types.NamespacedName{}
@@ -249,11 +340,11 @@ func (m *Manager) verifyTLS() error {
 			secretKey.Namespace = service.Namespace
 		} else {
 			// If it uses directly URL create a secret with webhookName and
-			// default namespace
+			// mgr namespace
 			secretKey.Name = m.webhookName
-			secretKey.Namespace = "default"
+			secretKey.Namespace = m.namespace
 		}
-		err = m.verifyTLSSecret(secretKey, clientConfig.CABundle)
+		err = m.verifyTLSSecret(secretKey, caKeyPair, clientConfig.CABundle)
 		if err != nil {
 			return errors.Wrapf(err, "failed verifying TLS secret %s", secretKey)
 		}

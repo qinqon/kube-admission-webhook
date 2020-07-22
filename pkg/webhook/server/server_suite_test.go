@@ -66,7 +66,7 @@ var (
 
 	expectedSecret = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
+			Namespace: expectedNamespace.Name,
 			Name:      "foowebhook",
 		},
 	}
