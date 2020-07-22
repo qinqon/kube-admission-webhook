@@ -25,9 +25,8 @@ case, in case the other controllers need to be non leader election a drop in
 place controller has beeing added to this project.
 
 ## Examples
-There is a integration example under test/pod it contains two controllers and
-a webhook, one of the controllers uses leader election there other do not so
-all the bits from this project are represented.
+The `pkg/webhook/server/server_test.go` can be use as an example of integrating
+the kube-admission-webhook with a controller-runtime manager.
 
 ## TroubleShooting
 There is a known race issue when the pod using this lib is controlled by an external operator,
