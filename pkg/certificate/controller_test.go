@@ -194,7 +194,7 @@ var _ = Describe("Certificates controller", func() {
 						Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 						Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
 						Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
-						Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateFromLastDeadline()), "should schedule new Reconcile after service cert rotation to rotate service cert again")
+						Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateCAFromLastDeadline()), "should schedule new Reconcile after service cert rotation to rotate service cert again")
 					})
 					Context("and called at previous RequeueAfter (ca cert rotation deadline)", func() {
 						BeforeEach(func() {

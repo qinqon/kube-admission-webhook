@@ -275,7 +275,7 @@ func (m *Manager) nextRotationDeadlineForCert(certificate *x509.Certificate) tim
 	return deadline
 }
 
-func (m *Manager) elapsedToRotateFromLastDeadline() time.Duration {
+func (m *Manager) elapsedToRotateCAFromLastDeadline() time.Duration {
 	deadline := m.now()
 
 	// If deadline was previously calculated return it, else do the
@@ -287,7 +287,7 @@ func (m *Manager) elapsedToRotateFromLastDeadline() time.Duration {
 	}
 	now := m.now()
 	elapsedToRotate := deadline.Sub(now)
-	m.log.Info(fmt.Sprintf("elapsedToRotateFromLastDeadline {now: %s, deadline: %s, elapsedToRotate: %s}", now, deadline, elapsedToRotate))
+	m.log.Info(fmt.Sprintf("elapsedToRotateCAFromLastDeadline {now: %s, deadline: %s, elapsedToRotate: %s}", now, deadline, elapsedToRotate))
 	return elapsedToRotate
 }
 

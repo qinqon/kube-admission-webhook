@@ -88,7 +88,7 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 	reqLogger := m.log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Certificates")
 
-	elapsedToRotate := m.elapsedToRotateFromLastDeadline()
+	elapsedToRotate := m.elapsedToRotateCAFromLastDeadline()
 	elapsedToRotateServices := m.elapsedToRotateServicesFromLastDeadline()
 
 	// Ensure that this Reconcile is not called after bad changes at
@@ -115,7 +115,7 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 		// Re-calculate elapsedToRotate since we have generated new
 		// certificates
 		m.nextRotationDeadline()
-		elapsedToRotate = m.elapsedToRotateFromLastDeadline()
+		elapsedToRotate = m.elapsedToRotateCAFromLastDeadline()
 
 		// Also recalculate it for serices certificate since they has changed
 		m.nextRotationDeadlineForServices()
