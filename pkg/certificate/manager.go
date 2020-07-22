@@ -219,8 +219,9 @@ func (m *Manager) nextRotationDeadlineForServices() time.Time {
 		return m.now()
 	}
 
-	// Iterate the `services` map to calculate deadline with the first
-	// occurrence
+	// Iterate the `services` to find the the certificate with a sooner
+	// expiration time
+	var nextToExpireServiceCert *x509.Certificate
 	for service, _ := range services {
 
 		tlsKeyPair, err := m.getTLSKeyPair(service)
@@ -228,13 +229,21 @@ func (m *Manager) nextRotationDeadlineForServices() time.Time {
 			m.log.Info(fmt.Sprintf("failed getting TLS keypair from service %s , forcing rotation: %v", service, err))
 			return m.now()
 		}
-
-		nextDeadline := m.nextRotationDeadlineForCert(tlsKeyPair.Cert)
-
-		// Store last calculated deadline to use it at Reconcile
-		m.lastRotateDeadlineForServices = &nextDeadline
-		return nextDeadline
+		if nextToExpireServiceCert == nil {
+			// First map element
+			nextToExpireServiceCert = tlsKeyPair.Cert
+		} else if nextToExpireServiceCert.NotAfter.After(tlsKeyPair.Cert.NotAfter) {
+			// iterated service cert will expire sooner let's select it
+			nextToExpireServiceCert = tlsKeyPair.Cert
+		}
 	}
+
+	nextDeadline := m.nextRotationDeadlineForCert(nextToExpireServiceCert)
+
+	// Store last calculated deadline to use it at Reconcile
+	m.lastRotateDeadlineForServices = &nextDeadline
+	return nextDeadline
+
 	return m.now()
 }
 
