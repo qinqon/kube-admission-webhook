@@ -146,8 +146,8 @@ func (m *Manager) CABundle() ([]byte, error) {
 }
 
 // getServicesFromConfiguration it retrieves all the references services at
-// webhook configuration clientConfig and in case there is no service ref
-// it will refernece fake one with webhook name, mgr namespace and
+// webhook configuration clientConfig and in case there is URL instead of
+// ServiceRef it will reference fake one with webhook name, mgr namespace and
 // passing the url hostname at map value
 func (m *Manager) getServicesFromConfiguration(configuration runtime.Object) (map[types.NamespacedName][]string, error) {
 
