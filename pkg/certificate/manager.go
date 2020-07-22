@@ -94,12 +94,12 @@ func NewManager(
 ) *Manager {
 
 	m := &Manager{
-		client:               client,
-		webhookName:          webhookName,
-		webhookType:          webhookType,
-		namespace:            namespace,
-		now:                  time.Now,
-		caCertDuration:       caCertDuration,
+		client:              client,
+		webhookName:         webhookName,
+		webhookType:         webhookType,
+		namespace:           namespace,
+		now:                 time.Now,
+		caCertDuration:      caCertDuration,
 		serviceCertDuration: serviceCertDuration,
 		log: logf.Log.WithName("certificate/manager").
 			WithValues("webhookType", webhookType, "webhookName", webhookName),
@@ -162,7 +162,7 @@ func (m *Manager) rotateAll() error {
 }
 
 func (m *Manager) rotateServices() error {
-	m.log.Info("Rotating CA cert/key")
+	m.log.Info("Rotating Services cert/key")
 
 	webhook, err := m.readyWebhookConfiguration()
 	if err != nil {
