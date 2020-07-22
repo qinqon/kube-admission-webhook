@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-BIN_DIR = $(CURDIR)/build/_output/bin/
+export BIN_DIR = $(CURDIR)/build/_output/bin/
 
 export GOFLAGS=-mod=vendor
 export GO111MODULE=on
@@ -27,7 +27,7 @@ export GITHUB_RELEASE := $(GOBIN)/github-release
 
 install_kubevirtci := hack/install-kubevirtci.sh
 
-all: test
+all: example test
 
 $(CLUSTER_DIR)/%: $(install_kubevirtci)
 	$(install_kubevirtci)
@@ -53,8 +53,9 @@ testenv:
 test: $(GO) testenv
 	KUBEBUILDER_ASSETS=$(BIN_DIR) $(GO) test $(WHAT) -timeout 2m -ginkgo.v -ginkgo.noColor=false  -test.v
 
-pod:
-	$(GO) build -o $(BIN_DIR) ./pkg/... ./test/pod
+example: $(GO) testenv
+	$(GO) build -o $(BIN_DIR) ./pkg/... ./example
+	KUBEBUILDER_ASSETS=$(BIN_DIR) $(GO) test ./example
 
 vendor:
 	$(GO) mod tidy
@@ -84,4 +85,5 @@ release: $(GITHUB_RELEASE)
 	prepare-minor \
 	prepare-major \
 	format \
+	example \
 	vet
