@@ -75,8 +75,15 @@ func main() {
 
 	// Setup webhooks
 	entryLog.Info("setting up webhook server")
-	mutatingWebhookServer := webhookserver.New(mgr.GetClient(), certificate.Options{WebhookName: "test-webhook", WebhookType: certificate.MutatingWebhook, Namespace: "mynamespace", CARotateInterval: certificate.OneYearDuration, CertRotateInterval: certificate.OneYearDuration})
-	validatingWebhookServer := webhookserver.New(mgr.GetClient(), certificate.Options{WebhookName: "test-webhook", WebhookType: certificate.ValidatingWebhook, Namespace: "mynamespace", CARotateInterval: certificate.OneYearDuration, CertRotateInterval: certificate.OneYearDuration})
+	mutatingWebhookServer, err := webhookserver.New(mgr.GetClient(), certificate.Options{WebhookName: "test-webhook", WebhookType: certificate.MutatingWebhook, Namespace: "mynamespace", CARotateInterval: certificate.OneYearDuration, CertRotateInterval: certificate.OneYearDuration})
+	if err != nil {
+		os.Exit(1)
+	}
+
+	validatingWebhookServer, err := webhookserver.New(mgr.GetClient(), certificate.Options{WebhookName: "test-webhook", WebhookType: certificate.ValidatingWebhook, Namespace: "mynamespace", CARotateInterval: certificate.OneYearDuration, CertRotateInterval: certificate.OneYearDuration})
+	if err != nil {
+		os.Exit(1)
+	}
 
 	entryLog.Info("registering webhooks to the webhook server")
 	mutatingWebhookServer.UpdateOpts(webhookserver.WithHook("/mutate-v1-pod", &webhook.Admission{Handler: &podAnnotator{Client: mgr.GetClient()}}))

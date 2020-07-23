@@ -65,8 +65,9 @@ var _ = Describe("Certificates controller", func() {
 
 	BeforeEach(func() {
 
-		mgr = NewManager(cli, Options{WebhookName: expectedMutatingWebhookConfiguration.Name, WebhookType: MutatingWebhook, Namespace: expectedNamespace.Name, CARotateInterval: caCertDuration, CertRotateInterval: serviceCertDuration})
-
+		var err error
+		mgr, err = NewManager(cli, Options{WebhookName: expectedMutatingWebhookConfiguration.Name, WebhookType: MutatingWebhook, Namespace: expectedNamespace.Name, CARotateInterval: caCertDuration, CertRotateInterval: serviceCertDuration})
+		Expect(err).To(Succeed(), "should succeed constructing certificate manager")
 		// Freeze time
 		now = time.Now()
 
@@ -120,6 +121,7 @@ var _ = Describe("Certificates controller", func() {
 			mgr.now = func() time.Time { return now }
 			triple.Now = mgr.now
 			var err error
+			By("Reconcile for the first time")
 			currentResult, err = mgr.Reconcile(reconcile.Request{})
 			Expect(err).To(Succeed(), "should success reconciling")
 			currentTLS = getTLS()
@@ -139,6 +141,7 @@ var _ = Describe("Certificates controller", func() {
 				mgr.now = func() time.Time { return now }
 				triple.Now = mgr.now
 				var err error
+				By("Reconcile in the middle of service cert deadline")
 				currentResult, err = mgr.Reconcile(reconcile.Request{})
 				Expect(err).To(Succeed(), "should success reconciling")
 
@@ -159,6 +162,7 @@ var _ = Describe("Certificates controller", func() {
 					mgr.now = func() time.Time { return now }
 					triple.Now = mgr.now
 					var err error
+					By("Reconcile at service cert rotation deadline")
 					currentResult, err = mgr.Reconcile(reconcile.Request{})
 					Expect(err).To(Succeed(), "should success reconciling")
 					currentTLS = getTLS()
@@ -182,6 +186,7 @@ var _ = Describe("Certificates controller", func() {
 						mgr.now = func() time.Time { return now }
 						triple.Now = mgr.now
 						var err error
+						By("Reconcile at second service cert rotation deadline")
 						currentResult, err = mgr.Reconcile(reconcile.Request{})
 						Expect(err).To(Succeed(), "should success reconciling")
 						currentTLS = getTLS()
@@ -205,6 +210,7 @@ var _ = Describe("Certificates controller", func() {
 							mgr.now = func() time.Time { return now }
 							triple.Now = mgr.now
 							var err error
+							By("Reconcile at ca cert rotation deadline")
 							currentResult, err = mgr.Reconcile(reconcile.Request{})
 							Expect(err).To(Succeed(), "should success reconciling")
 							currentTLS = getTLS()
@@ -233,6 +239,7 @@ var _ = Describe("Certificates controller", func() {
 								mgr.now = func() time.Time { return now }
 								triple.Now = mgr.now
 								var err error
+								By("Reconcile at cleanup deadline")
 								currentResult, err = mgr.Reconcile(reconcile.Request{})
 								Expect(err).To(Succeed(), "should success reconciling")
 								currentTLS = getTLS()

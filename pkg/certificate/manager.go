@@ -48,6 +48,9 @@ type Manager struct {
 	// caCertDuration Options.CARotateInterval
 	caCertDuration time.Duration
 
+	// caCertDuration Options.CAOverlapInterval
+	caOverlapDuration time.Duration
+
 	// serviceCertDuration Options.CertRotateInterval
 	serviceCertDuration time.Duration
 
@@ -76,9 +79,11 @@ type Manager struct {
 func NewManager(
 	client client.Client,
 	options Options,
-) *Manager {
-
-	options.setDefaults()
+) (*Manager, error) {
+	err := options.setDefaultsAndValidate()
+	if err != nil {
+		return nil, err
+	}
 
 	m := &Manager{
 		client:              client,
@@ -87,11 +92,12 @@ func NewManager(
 		namespace:           options.Namespace,
 		now:                 time.Now,
 		caCertDuration:      options.CARotateInterval,
+		caOverlapDuration:   options.CAOverlapInterval,
 		serviceCertDuration: options.CertRotateInterval,
 		log: logf.Log.WithName("certificate/manager").
 			WithValues("webhookType", options.WebhookType, "webhookName", options.WebhookName),
 	}
-	return m
+	return m, nil
 }
 
 func (m *Manager) getCACertsFromCABundle() ([]*x509.Certificate, error) {
