@@ -26,14 +26,13 @@ type Manager struct {
 	// client contains the controller-runtime client from the manager.
 	client client.Client
 
-	// webhookName The Mutating or Validating Webhook configuration name
+	// webhookName Options.WebhookName
 	webhookName string
 
-	// webhookType The Mutating or Validating Webhook configuration type
+	// webhookType Options.WebhookType
 	webhookType WebhookType
 
-	// The namespace where ca secret will be created or service secrets
-	// for ClientConfig that has URL instead of ServiceRef
+	// namespace Options.Namespace
 	namespace string
 
 	// now is an artifact to do some unit testing without waiting for
@@ -46,26 +45,16 @@ type Manager struct {
 	// lastRotateDeadlineForServices store the value of last call from nextRotationDeadlineForServices
 	lastRotateDeadlineForServices *time.Time
 
-	// caCertDuration configurated duration for CA and certificate
+	// caCertDuration Options.CARotateInterval
 	caCertDuration time.Duration
 
-	// serviceCertDuration configurated duration for of service certificate
-	// the the webhook configuration is referencing different services all
-	// of them will share the same duration
+	// serviceCertDuration Options.CertRotateInterval
 	serviceCertDuration time.Duration
 
 	// log initialized log that containes the webhook configuration name and
 	// namespace so it's easy to debug.
 	log logr.Logger
 }
-
-type WebhookType string
-
-const (
-	MutatingWebhook   WebhookType = "Mutating"
-	ValidatingWebhook WebhookType = "Validating"
-	OneYearDuration               = 365 * 24 * time.Hour
-)
 
 // NewManager with create a certManager that generated a secret per service
 // at the webhook TLS http server.
@@ -86,23 +75,21 @@ const (
 // approve the generated cert/key with k8s certification approval mechanism
 func NewManager(
 	client client.Client,
-	webhookName string,
-	webhookType WebhookType,
-	namespace string,
-	caCertDuration time.Duration,
-	serviceCertDuration time.Duration,
+	options Options,
 ) *Manager {
+
+	options.setDefaults()
 
 	m := &Manager{
 		client:              client,
-		webhookName:         webhookName,
-		webhookType:         webhookType,
-		namespace:           namespace,
+		webhookName:         options.WebhookName,
+		webhookType:         options.WebhookType,
+		namespace:           options.Namespace,
 		now:                 time.Now,
-		caCertDuration:      caCertDuration,
-		serviceCertDuration: serviceCertDuration,
+		caCertDuration:      options.CARotateInterval,
+		serviceCertDuration: options.CertRotateInterval,
 		log: logf.Log.WithName("certificate/manager").
-			WithValues("webhookType", webhookType, "webhookName", webhookName),
+			WithValues("webhookType", options.WebhookType, "webhookName", options.WebhookName),
 	}
 	return m
 }

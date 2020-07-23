@@ -84,7 +84,7 @@ var _ = Describe("Webhook server", func() {
 				return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 			}
 
-			server := New(cli, expectedMutatingWebhookConfiguration.Name, certificate.MutatingWebhook, expectedNamespace.Name, certificate.OneYearDuration, certificate.OneYearDuration,
+			server := New(cli, certificate.Options{WebhookName: expectedMutatingWebhookConfiguration.Name, WebhookType: certificate.MutatingWebhook, Namespace: expectedNamespace.Name, CARotateInterval: certificate.OneYearDuration, CertRotateInterval: certificate.OneYearDuration},
 				WithCertDir(certDir),
 				WithPort(freePort),
 				WithHook("/mutatepod",

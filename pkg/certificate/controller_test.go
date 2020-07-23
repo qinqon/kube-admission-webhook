@@ -65,7 +65,7 @@ var _ = Describe("Certificates controller", func() {
 
 	BeforeEach(func() {
 
-		mgr = NewManager(cli, expectedMutatingWebhookConfiguration.Name, MutatingWebhook, expectedNamespace.Name, caCertDuration, serviceCertDuration)
+		mgr = NewManager(cli, Options{WebhookName: expectedMutatingWebhookConfiguration.Name, WebhookType: MutatingWebhook, Namespace: expectedNamespace.Name, CARotateInterval: caCertDuration, CertRotateInterval: serviceCertDuration})
 
 		// Freeze time
 		now = time.Now()
