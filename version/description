@@ -1,5 +1,6 @@
-v0.11.0
+v0.12.0
 
 Features:
-* Remove secret's ownership (#32)
-
+* Implement CAOverlapInterval options to ditch old CAs from CABunlde
+* Use a struct to group certificate options (#37)
+* Use new knob for the service certificate rotation (#34)
