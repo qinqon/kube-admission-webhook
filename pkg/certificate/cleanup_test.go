@@ -32,15 +32,17 @@ var _ = Describe("CABundle cleanup", func() {
 	}
 
 	type earliestCleanupDeadlineCase struct {
-		certsExpiration []certificateExpiration
-		expectedElapsed time.Duration
+		caOverlapDuration time.Duration
+		certsExpiration   []certificateExpiration
+		expectedElapsed   time.Duration
 	}
 	DescribeTable("earliestCleanupDeadline",
 		func(c earliestCleanupDeadlineCase) {
 
 			m := Manager{
-				now: func() time.Time { return now },
-				log: log,
+				caOverlapDuration: c.caOverlapDuration,
+				now:               func() time.Time { return now },
+				log:               log,
 			}
 
 			certificates := expirationsToCertificates(c.certsExpiration)
@@ -54,6 +56,7 @@ var _ = Describe("CABundle cleanup", func() {
 			expectedElapsed: time.Duration(0),
 		}),
 		Entry("one certificate, deadline is certificate's expiration time", earliestCleanupDeadlineCase{
+			caOverlapDuration: 5 * time.Hour,
 			certsExpiration: []certificateExpiration{
 				{
 					notBefore: -1 * time.Hour,
@@ -63,13 +66,14 @@ var _ = Describe("CABundle cleanup", func() {
 			expectedElapsed: 99 * time.Hour,
 		}),
 		Entry("first one sooner, deadline taken from it", earliestCleanupDeadlineCase{
+			caOverlapDuration: 5 * time.Hour,
 			certsExpiration: []certificateExpiration{
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -3 * time.Hour,
 					notAfter:  88 * time.Hour,
 				},
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -2 * time.Hour,
 					notAfter:  99 * time.Hour,
 				},
 				{
@@ -77,16 +81,17 @@ var _ = Describe("CABundle cleanup", func() {
 					notAfter:  101 * time.Hour,
 				},
 			},
-			expectedElapsed: 88 * time.Hour,
+			expectedElapsed: 2 * time.Hour,
 		}),
 		Entry("second one sooner, deadline taken from it", earliestCleanupDeadlineCase{
+			caOverlapDuration: 5 * time.Hour,
 			certsExpiration: []certificateExpiration{
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -3 * time.Hour,
 					notAfter:  88 * time.Hour,
 				},
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -4 * time.Hour,
 					notAfter:  77 * time.Hour,
 				},
 				{
@@ -94,12 +99,13 @@ var _ = Describe("CABundle cleanup", func() {
 					notAfter:  101 * time.Hour,
 				},
 			},
-			expectedElapsed: 77 * time.Hour,
+			expectedElapsed: 1 * time.Hour,
 		}),
 		Entry("third one sooner, deadline taken from it", earliestCleanupDeadlineCase{
+			caOverlapDuration: 5 * time.Hour,
 			certsExpiration: []certificateExpiration{
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: 0 * time.Hour,
 					notAfter:  99 * time.Hour,
 				},
 				{
@@ -107,39 +113,57 @@ var _ = Describe("CABundle cleanup", func() {
 					notAfter:  77 * time.Hour,
 				},
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -2 * time.Hour,
 					notAfter:  66 * time.Hour,
 				},
 			},
-			expectedElapsed: 66 * time.Hour,
+			expectedElapsed: 3 * time.Hour,
 		}),
 	)
-	type cleanUpExpiredCertificatesCase struct {
+	type cleanUpCertificatesCase struct {
+		caOverlapDuration       time.Duration
 		certsExpiration         []certificateExpiration
 		expectedCertsExpiration []certificateExpiration
 	}
-	DescribeTable("cleanUpExpiredCertificates",
-		func(c cleanUpExpiredCertificatesCase) {
+	DescribeTable("cleanUpCertificates",
+		func(c cleanUpCertificatesCase) {
 
 			m := Manager{
-				now: func() time.Time { return now },
-				log: log,
+				now:               func() time.Time { return now },
+				log:               log,
+				caOverlapDuration: c.caOverlapDuration,
 			}
 
 			certificates := expirationsToCertificates(c.certsExpiration)
-			cleanedUpCertificates := m.cleanUpExpiredCertificates(certificates)
+			cleanedUpCertificates := m.cleanUpCertificates(certificates)
 			expectedCertificates := expirationsToCertificates(c.expectedCertsExpiration)
-			Expect(cleanedUpCertificates).To(Equal(expectedCertificates), "should have proper certificates cleanup")
+			Expect(cleanedUpCertificates).To(Equal(expectedCertificates), "should have cleaned up certificates")
 
 		},
-		Entry("empty caBundle do noop", cleanUpExpiredCertificatesCase{
+		Entry("empty caBundle do noop", cleanUpCertificatesCase{
 			certsExpiration:         []certificateExpiration{},
 			expectedCertsExpiration: []certificateExpiration{},
 		}),
-		Entry("none expired, should keep them", cleanUpExpiredCertificatesCase{
+		Entry("contains just one certificate and its beyond overlap duration (there is no overlap happening), should keep it ", cleanUpCertificatesCase{
+			caOverlapDuration: 5 * time.Hour,
 			certsExpiration: []certificateExpiration{
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -6 * time.Hour,
+					notAfter:  11 * time.Hour,
+				},
+			},
+			expectedCertsExpiration: []certificateExpiration{
+				{
+					notBefore: -6 * time.Hour,
+					notAfter:  11 * time.Hour,
+				},
+			},
+		}),
+		Entry("none beyond overlap duration, should keep them", cleanUpCertificatesCase{
+			caOverlapDuration: 5 * time.Hour,
+			certsExpiration: []certificateExpiration{
+				{
+					notBefore: -2 * time.Hour,
 					notAfter:  11 * time.Hour,
 				},
 				{
@@ -147,13 +171,13 @@ var _ = Describe("CABundle cleanup", func() {
 					notAfter:  99 * time.Hour,
 				},
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -3 * time.Hour,
 					notAfter:  101 * time.Hour,
 				},
 			},
 			expectedCertsExpiration: []certificateExpiration{
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -2 * time.Hour,
 					notAfter:  11 * time.Hour,
 				},
 				{
@@ -161,43 +185,45 @@ var _ = Describe("CABundle cleanup", func() {
 					notAfter:  99 * time.Hour,
 				},
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -3 * time.Hour,
 					notAfter:  101 * time.Hour,
 				},
 			},
 		}),
 
-		Entry("first one expired right now, should remove it", cleanUpExpiredCertificatesCase{
+		Entry("first one is beyond overlap duration right now, should remove it", cleanUpCertificatesCase{
+			caOverlapDuration: 5 * time.Hour,
 			certsExpiration: []certificateExpiration{
 				{
-					notBefore: -1 * time.Hour,
-					notAfter:  0 * time.Hour,
+					notBefore: -5 * time.Hour,
+					notAfter:  33 * time.Hour,
 				},
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -3 * time.Hour,
 					notAfter:  99 * time.Hour,
 				},
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -2 * time.Hour,
 					notAfter:  101 * time.Hour,
 				},
 			},
 			expectedCertsExpiration: []certificateExpiration{
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -3 * time.Hour,
 					notAfter:  99 * time.Hour,
 				},
 				{
-					notBefore: -1 * time.Hour,
+					notBefore: -2 * time.Hour,
 					notAfter:  101 * time.Hour,
 				},
 			},
 		}),
-		Entry("first one expired long ago, should remove it", cleanUpExpiredCertificatesCase{
+		Entry("first one beyond overlap duration long ago, should remove it", cleanUpCertificatesCase{
+			caOverlapDuration: 5 * time.Hour,
 			certsExpiration: []certificateExpiration{
 				{
 					notBefore: -99 * time.Hour,
-					notAfter:  -77 * time.Hour,
+					notAfter:  44 * time.Hour,
 				},
 				{
 					notBefore: -1 * time.Hour,
@@ -219,15 +245,16 @@ var _ = Describe("CABundle cleanup", func() {
 				},
 			},
 		}),
-		Entry("middle one expired right now, should remove it", cleanUpExpiredCertificatesCase{
+		Entry("middle one beyond overlap duration right now, should remove it", cleanUpCertificatesCase{
+			caOverlapDuration: 5 * time.Hour,
 			certsExpiration: []certificateExpiration{
 				{
 					notBefore: -1 * time.Hour,
 					notAfter:  33 * time.Hour,
 				},
 				{
-					notBefore: -1 * time.Hour,
-					notAfter:  0 * time.Hour,
+					notBefore: -5 * time.Hour,
+					notAfter:  44 * time.Hour,
 				},
 				{
 					notBefore: -1 * time.Hour,
@@ -245,7 +272,8 @@ var _ = Describe("CABundle cleanup", func() {
 				},
 			},
 		}),
-		Entry("middle one expired long ago, should remove it", cleanUpExpiredCertificatesCase{
+		Entry("middle one beyond overlap duration long ago, should remove it", cleanUpCertificatesCase{
+			caOverlapDuration: 5 * time.Hour,
 			certsExpiration: []certificateExpiration{
 				{
 					notBefore: -1 * time.Hour,
@@ -253,7 +281,7 @@ var _ = Describe("CABundle cleanup", func() {
 				},
 				{
 					notBefore: -99 * time.Hour,
-					notAfter:  -66 * time.Hour,
+					notAfter:  44 * time.Hour,
 				},
 				{
 					notBefore: -1 * time.Hour,
@@ -271,7 +299,8 @@ var _ = Describe("CABundle cleanup", func() {
 				},
 			},
 		}),
-		Entry("last one expired long ago, should remove it", cleanUpExpiredCertificatesCase{
+		Entry("last one beyond overlap duration long ago, should keep it", cleanUpCertificatesCase{
+			caOverlapDuration: 5 * time.Hour,
 			certsExpiration: []certificateExpiration{
 				{
 					notBefore: -1 * time.Hour,
@@ -283,7 +312,7 @@ var _ = Describe("CABundle cleanup", func() {
 				},
 				{
 					notBefore: -34 * time.Hour,
-					notAfter:  -33 * time.Hour,
+					notAfter:  90 * time.Hour,
 				},
 			},
 			expectedCertsExpiration: []certificateExpiration{
@@ -295,7 +324,70 @@ var _ = Describe("CABundle cleanup", func() {
 					notBefore: -1 * time.Hour,
 					notAfter:  80 * time.Hour,
 				},
+				{
+					notBefore: -34 * time.Hour,
+					notAfter:  90 * time.Hour,
+				},
 			},
+		}),
+		Entry("All beyond overlap duration, should keep the latest appended", cleanUpCertificatesCase{
+			caOverlapDuration: 5 * time.Hour,
+			certsExpiration: []certificateExpiration{
+				{
+					notBefore: -7 * time.Hour,
+					notAfter:  77 * time.Hour,
+				},
+				{
+					notBefore: -8 * time.Hour,
+					notAfter:  80 * time.Hour,
+				},
+				{
+					notBefore: -34 * time.Hour,
+					notAfter:  90 * time.Hour,
+				},
+			},
+			expectedCertsExpiration: []certificateExpiration{
+				{
+					notBefore: -34 * time.Hour,
+					notAfter:  90 * time.Hour,
+				},
+			},
+		}),
+		Entry("All expired, should remove all of them", cleanUpCertificatesCase{
+			caOverlapDuration: 5 * time.Hour,
+			certsExpiration: []certificateExpiration{
+				{
+					notBefore: -3 * time.Hour,
+					notAfter:  -1 * time.Hour,
+				},
+				{
+					notBefore: -2 * time.Hour,
+					notAfter:  -1 * time.Hour,
+				},
+				{
+					notBefore: -1 * time.Hour,
+					notAfter:  -1 * time.Hour,
+				},
+			},
+			expectedCertsExpiration: []certificateExpiration{},
+		}),
+		Entry("All expired and beyond limit, should remove all of them", cleanUpCertificatesCase{
+			caOverlapDuration: 5 * time.Hour,
+			certsExpiration: []certificateExpiration{
+				{
+					notBefore: -6 * time.Hour,
+					notAfter:  -1 * time.Hour,
+				},
+				{
+					notBefore: -7 * time.Hour,
+					notAfter:  -1 * time.Hour,
+				},
+				{
+					notBefore: -8 * time.Hour,
+					notAfter:  -1 * time.Hour,
+				},
+			},
+			expectedCertsExpiration: []certificateExpiration{},
 		}),
 	)
 })
