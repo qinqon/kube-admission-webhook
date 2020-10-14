@@ -56,7 +56,7 @@ test: $(GO) testenv
 pod:
 	$(GO) build -o $(BIN_DIR) ./pkg/... ./test/pod
 
-vendor:
+vendor: $(GO)
 	$(GO) mod tidy
 	$(GO) mod vendor
 
