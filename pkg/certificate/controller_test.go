@@ -223,8 +223,8 @@ var _ = Describe("Certificates controller", func() {
 							Expect(currentTLS.caCertificate).ToNot(Equal(previousTLS.caCertificate), "should have rotate CA certificate")
 							Expect(currentTLS.caPrivateKey).ToNot(Equal(previousTLS.caPrivateKey), "should have rotate CA key rotation")
 
-							elapsedForCleanup, err := mgr.earliestElapsedForCleanup()
-							Expect(err).To(Succeed(), "should succeed calculating earliestElapsedForCleanup")
+							elapsedForCleanup, err := mgr.earliestElapsedForCACertsCleanup()
+							Expect(err).To(Succeed(), "should succeed calculating earliestElapsedForCACertsCleanup")
 							Expect(currentResult.RequeueAfter).To(Equal(elapsedForCleanup), "Reconcile at rotate should schedule next Reconcile to do the CA overlapping cleanup")
 
 							cas, err := triple.ParseCertsPEM(currentTLS.caBundle)

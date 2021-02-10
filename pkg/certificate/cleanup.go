@@ -10,34 +10,28 @@ import (
 	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
 )
 
+func (m *Manager) earliestElapsedForCACertsCleanup() (time.Duration, error) {
+	cas, err := m.getCACertsFromCABundle()
+	if err != nil {
+		return time.Duration(0), errors.Wrap(err, "failed getting CA certificates from CA bundle")
+	}
+	return m.earliestElapsedForCleanup(cas, m.caOverlapDuration)
+}
+
 // earliestElapsedForCleanup return a subtraction between earliestCleanupDeadline and
 // `now`
-func (m *Manager) earliestElapsedForCleanup() (time.Duration, error) {
-	deadline, err := m.earliestCleanupDeadline()
-	if err != nil {
-		return time.Duration(0), errors.Wrap(err, "failed calculating cleanup deadline")
-	}
+func (m *Manager) earliestElapsedForCleanup(certificates []*x509.Certificate, overlapDuration time.Duration) (time.Duration, error) {
+	deadline := m.earliestCleanupDeadlineForCerts(certificates, overlapDuration)
 	now := m.now()
 	elapsedForCleanup := deadline.Sub(now)
 	m.log.Info(fmt.Sprintf("earliestElapsedForCleanup {now: %s, deadline: %s, elapsedForCleanup: %s}", now, deadline, elapsedForCleanup))
 	return elapsedForCleanup, nil
 }
 
-// earliestCleanupDeadline get all the certificates at CABundle and return the
-// deadline calculated by earliestCleanupDeadlineForCerts
-func (m *Manager) earliestCleanupDeadline() (time.Time, error) {
-	cas, err := m.getCACertsFromCABundle()
-	if err != nil {
-		return m.now(), errors.Wrap(err, "failed getting CA certificates from CA bundle")
-	}
-
-	return m.earliestCleanupDeadlineForCerts(cas), nil
-}
-
 // earliestCleanupDeadlineForCACerts will inspect CA certificates
-// select the deadline based on certificate NotBefore + caOverlapDuration
+// select the deadline based on certificate NotBefore + overlapDuration
 // returning the daedline that is going to happend sooner
-func (m *Manager) earliestCleanupDeadlineForCerts(certificates []*x509.Certificate) time.Time {
+func (m *Manager) earliestCleanupDeadlineForCerts(certificates []*x509.Certificate, overlapDuration time.Duration) time.Time {
 	var selectedCertificate *x509.Certificate
 
 	// There is no overlap just return expiration time
@@ -56,7 +50,7 @@ func (m *Manager) earliestCleanupDeadlineForCerts(certificates []*x509.Certifica
 
 	// Add the overlap duration since is the time certs are going to be living
 	// add CABundle
-	return selectedCertificate.NotBefore.Add(m.caOverlapDuration)
+	return selectedCertificate.NotBefore.Add(overlapDuration)
 }
 
 func (m *Manager) cleanUpCABundle() error {
@@ -65,7 +59,7 @@ func (m *Manager) cleanUpCABundle() error {
 		if err != nil {
 			return nil, errors.Wrap(err, "failed getting ca certs to start cleanup")
 		}
-		cleanedCAs := m.cleanUpCertificates(cas)
+		cleanedCAs := m.cleanUpCertificates(cas, m.caOverlapDuration)
 		pem := triple.EncodeCertsPEM(cleanedCAs)
 		return pem, nil
 	})
@@ -76,7 +70,7 @@ func (m *Manager) cleanUpCABundle() error {
 	return nil
 }
 
-func (m *Manager) cleanUpCertificates(certificates []*x509.Certificate) []*x509.Certificate {
+func (m *Manager) cleanUpCertificates(certificates []*x509.Certificate, overlapDuration time.Duration) []*x509.Certificate {
 	logger := m.log.WithName("cleanUpCertificates")
 	logger.Info("Cleaning up expired or beyond overlap duration limit at CA bundle")
 	// There is no overlap
@@ -88,7 +82,7 @@ func (m *Manager) cleanUpCertificates(certificates []*x509.Certificate) []*x509.
 	// create a zero-length slice with the same underlying array
 	cleanedUpCertificates := certificates[:0]
 	for i, certificate := range certificates {
-		logger.Info("Checking certificate for cleanup", "now", now, "caOverlapDuration", m.caOverlapDuration, "NotBefore", certificate.NotBefore, "NotAfter", certificate.NotAfter)
+		logger.Info("Checking certificate for cleanup", "now", now, "overlapDuration", overlapDuration, "NotBefore", certificate.NotBefore, "NotAfter", certificate.NotAfter)
 
 		// Expired certificate are cleaned up
 		caExpirationDate := certificate.NotAfter
@@ -99,9 +93,9 @@ func (m *Manager) cleanUpCertificates(certificates []*x509.Certificate) []*x509.
 
 		// Clean up certificates that pass CA Overlap Duration limit,
 		// except for the last appended one (i.e. the last generated from a rotation) since we need at least one valid certificate
-		caOverlapDate := certificate.NotBefore.Add(m.caOverlapDuration)
+		caOverlapDate := certificate.NotBefore.Add(overlapDuration)
 		if i != len(certificates)-1 && !now.Before(caOverlapDate) {
-			logger.Info("Cleaning up certificate beyond CA overlap duration", "now", now, "caOverlapDuration", m.caOverlapDuration, "NotBefore", certificate.NotBefore, "NotAfter", certificate.NotAfter)
+			logger.Info("Cleaning up certificate beyond CA overlap duration", "now", now, "overlapDuration", overlapDuration, "NotBefore", certificate.NotBefore, "NotAfter", certificate.NotAfter)
 			continue
 		}
 		cleanedUpCertificates = append(cleanedUpCertificates, certificate)

@@ -134,7 +134,7 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 		elapsedToRotateServices = m.elapsedToRotateServicesFromLastDeadline()
 	}
 
-	elapsedForCleanup, err := m.earliestElapsedForCleanup()
+	elapsedForCleanup, err := m.earliestElapsedForCACertsCleanup()
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed getting cleanup deadline")
 	}
@@ -147,7 +147,7 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 		}
 
 		// Re-calculate cleanup deadline since we may have to remove some certs there
-		elapsedForCleanup, err = m.earliestElapsedForCleanup()
+		elapsedForCleanup, err = m.earliestElapsedForCACertsCleanup()
 		if err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "failed re-calculating cleanup deadline")
 		}
