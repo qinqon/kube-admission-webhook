@@ -142,7 +142,6 @@ func (m *Manager) CABundle() ([]byte, error) {
 // passing the url hostname at map value
 func (m *Manager) getServicesFromConfiguration(configuration runtime.Object) (map[types.NamespacedName][]string, error) {
 
-	logger := m.log.WithName("getServicesFromConfiguration")
 	services := map[types.NamespacedName][]string{}
 
 	for _, clientConfig := range m.clientConfigList(configuration) {
@@ -151,11 +150,9 @@ func (m *Manager) getServicesFromConfiguration(configuration runtime.Object) (ma
 		hostnames := []string{}
 
 		if clientConfig.Service != nil {
-			logger.Info("Composing service name and namespace from ServiceRef", "serviceRef", clientConfig.Service)
 			service.Name = clientConfig.Service.Name
 			service.Namespace = clientConfig.Service.Namespace
 		} else if clientConfig.URL != nil {
-			logger.Info("Composing service name and namespace from URL", "URL", clientConfig.URL)
 			service.Name = m.webhookName
 			service.Namespace = m.namespace
 			u, err := url.Parse(*clientConfig.URL)

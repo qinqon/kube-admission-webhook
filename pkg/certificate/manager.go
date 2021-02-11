@@ -10,7 +10,6 @@ import (
 	"github.com/go-logr/logr"
 
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 
@@ -98,7 +97,7 @@ func NewManager(
 		caOverlapDuration:      options.CAOverlapInterval,
 		serviceCertDuration:    options.CertRotateInterval,
 		serviceOverlapDuration: options.CertOverlapInterval,
-		log: logf.Log.WithName("certificate/manager").
+		log: logf.Log.WithName("certificate/Manager").
 			WithValues("webhookType", options.WebhookType, "webhookName", options.WebhookName),
 	}
 	return m, nil
@@ -235,7 +234,7 @@ func (m *Manager) nextRotationDeadlineForServices() time.Time {
 		}
 	}
 
-	nextDeadline := m.nextRotationDeadlineForCert(nextToExpireServiceCert)
+	nextDeadline := m.nextRotationDeadlineForCert(nextToExpireServiceCert, m.serviceOverlapDuration)
 
 	// Store last calculated deadline to use it at Reconcile
 	m.lastRotateDeadlineForServices = &nextDeadline
@@ -260,7 +259,7 @@ func (m *Manager) nextRotationDeadline() time.Time {
 		m.log.Info("Failed reading last CA cert from CABundle, forcing rotation", "err", err)
 		return m.now()
 	}
-	nextDeadline := m.nextRotationDeadlineForCert(caCert)
+	nextDeadline := m.nextRotationDeadlineForCert(caCert, m.caOverlapDuration)
 
 	// Store last calculated deadline to use it at Reconcile
 	m.lastRotateDeadline = &nextDeadline
@@ -268,12 +267,13 @@ func (m *Manager) nextRotationDeadline() time.Time {
 }
 
 // nextRotationDeadlineForCert returns a value for the threshold at which the
-// current certificate should be rotated, 80%+/-10% of the expiration of the
-// certificate
-func (m *Manager) nextRotationDeadlineForCert(certificate *x509.Certificate) time.Time {
+// current certificate should be rotated, the expiration of the
+// certificate - overlap
+func (m *Manager) nextRotationDeadlineForCert(certificate *x509.Certificate, overlap time.Duration) time.Time {
 	notAfter := certificate.NotAfter
 	totalDuration := float64(notAfter.Sub(certificate.NotBefore))
-	deadline := certificate.NotBefore.Add(jitteryDuration(totalDuration))
+	deadlineDuration := totalDuration - float64(overlap)
+	deadline := certificate.NotBefore.Add(time.Duration(deadlineDuration))
 
 	m.log.Info(fmt.Sprintf("Certificate expiration is %v, totalDuration is %v, rotation deadline is %v", notAfter, totalDuration, deadline))
 	return deadline
@@ -346,16 +346,4 @@ func (m *Manager) verifyTLS() error {
 	}
 
 	return nil
-}
-
-// jitteryDuration uses some jitter to set the rotation threshold so each node
-// will rotate at approximately 70-90% of the total lifetime of the
-// certificate.  With jitter, if a number of nodes are added to a cluster at
-// approximately the same time (such as cluster creation time), they won't all
-// try to rotate certificates at the same time for the rest of the life of the
-// cluster.
-//
-// This function is represented as a variable to allow replacement during testing.
-var jitteryDuration = func(totalDuration float64) time.Duration {
-	return wait.Jitter(time.Duration(totalDuration), 0.2) - time.Duration(totalDuration*0.3)
 }
