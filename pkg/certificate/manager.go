@@ -54,6 +54,9 @@ type Manager struct {
 	// serviceCertDuration Options.CertRotateInterval
 	serviceCertDuration time.Duration
 
+	// serviceOverlapDuration Options.CertOverlapInterval
+	serviceOverlapDuration time.Duration
+
 	// log initialized log that containes the webhook configuration name and
 	// namespace so it's easy to debug.
 	log logr.Logger
@@ -86,14 +89,15 @@ func NewManager(
 	}
 
 	m := &Manager{
-		client:              client,
-		webhookName:         options.WebhookName,
-		webhookType:         options.WebhookType,
-		namespace:           options.Namespace,
-		now:                 time.Now,
-		caCertDuration:      options.CARotateInterval,
-		caOverlapDuration:   options.CAOverlapInterval,
-		serviceCertDuration: options.CertRotateInterval,
+		client:                 client,
+		webhookName:            options.WebhookName,
+		webhookType:            options.WebhookType,
+		namespace:              options.Namespace,
+		now:                    time.Now,
+		caCertDuration:         options.CARotateInterval,
+		caOverlapDuration:      options.CAOverlapInterval,
+		serviceCertDuration:    options.CertRotateInterval,
+		serviceOverlapDuration: options.CertOverlapInterval,
 		log: logf.Log.WithName("certificate/manager").
 			WithValues("webhookType", options.WebhookType, "webhookName", options.WebhookName),
 	}
@@ -236,8 +240,6 @@ func (m *Manager) nextRotationDeadlineForServices() time.Time {
 	// Store last calculated deadline to use it at Reconcile
 	m.lastRotateDeadlineForServices = &nextDeadline
 	return nextDeadline
-
-	return m.now()
 }
 
 // nextRotationDeadline returns a value for the threshold at which the

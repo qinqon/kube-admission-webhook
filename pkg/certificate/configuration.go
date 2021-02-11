@@ -83,16 +83,7 @@ func (m *Manager) readyWebhookConfiguration() (runtime.Object, error) {
 func (m *Manager) addCertificateToCABundle(caCert *x509.Certificate) error {
 	m.log.Info("Reset CA bundle with one cert for webhook")
 	_, err := m.updateWebhookCABundleWithFunc(func(currentCABundle []byte) ([]byte, error) {
-		cas := []*x509.Certificate{}
-		if len(currentCABundle) > 0 {
-			var err error
-			cas, err = triple.ParseCertsPEM(currentCABundle)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed parsing current CA bundle")
-			}
-		}
-		cas = append(cas, caCert)
-		return triple.EncodeCertsPEM(cas), nil
+		return triple.AddCertToPEM(caCert, currentCABundle)
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to update webhook CABundle")

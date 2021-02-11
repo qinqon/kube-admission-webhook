@@ -134,29 +134,48 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 		elapsedToRotateServices = m.elapsedToRotateServicesFromLastDeadline()
 	}
 
-	elapsedForCleanup, err := m.earliestElapsedForCACertsCleanup()
+	elapsedForCABundleCleanup, err := m.earliestElapsedForCACertsCleanup()
 	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "failed getting cleanup deadline")
+		return reconcile.Result{}, errors.Wrap(err, "failed getting ca bundle cleanup deadline")
 	}
 
 	// We have pass cleanup deadline let's do the cleanup
-	if elapsedForCleanup <= 0 {
+	if elapsedForCABundleCleanup <= 0 {
 		err = m.cleanUpCABundle()
 		if err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "failed cleaning up CABundle")
 		}
 
 		// Re-calculate cleanup deadline since we may have to remove some certs there
-		elapsedForCleanup, err = m.earliestElapsedForCACertsCleanup()
+		elapsedForCABundleCleanup, err = m.earliestElapsedForCACertsCleanup()
 		if err != nil {
-			return reconcile.Result{}, errors.Wrap(err, "failed re-calculating cleanup deadline")
+			return reconcile.Result{}, errors.Wrap(err, "failed re-calculating ca bundle cleanup deadline")
+		}
+	}
+
+	elapsedForServiceCertsCleanup, err := m.earliestElapsedForServiceCertsCleanup()
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed getting service certs cleanup deadline")
+	}
+
+	// We have pass cleanup deadline let's do the cleanup
+	if elapsedForServiceCertsCleanup <= 0 {
+		err = m.cleanUpServiceCerts()
+		if err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "failed cleaning up service certs")
+		}
+
+		// Re-calculate cleanup deadline since we may have to remove some certs there
+		elapsedForServiceCertsCleanup, err = m.earliestElapsedForServiceCertsCleanup()
+		if err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "failed re-calculating service certs cleanup deadline")
 		}
 	}
 
 	// Return the event that is going to happend sonner all services certificates rotation,
 	// services certificate rotation or ca bundle cleanup
-	m.log.Info("Calculating RequeueAfter", "elapsedToRotateCA", elapsedToRotateCA, "elapsedToRotateServices", elapsedToRotateServices, "elapsedForCleanup", elapsedForCleanup)
-	requeueAfter := min(elapsedToRotateCA, elapsedToRotateServices, elapsedForCleanup)
+	m.log.Info("Calculating RequeueAfter", "elapsedToRotateCA", elapsedToRotateCA, "elapsedToRotateServices", elapsedToRotateServices, "elapsedForCABundleCleanup", elapsedForCABundleCleanup, "elapsedForServiceCertsCleanup", elapsedForServiceCertsCleanup)
+	requeueAfter := min(elapsedToRotateCA, elapsedToRotateServices, elapsedForCABundleCleanup, elapsedForServiceCertsCleanup)
 
 	m.log.Info(fmt.Sprintf("Certificates will be Reconcile on %s", m.now().Add(requeueAfter)))
 	return reconcile.Result{RequeueAfter: requeueAfter}, nil

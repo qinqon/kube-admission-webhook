@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/pkg/errors"
 
 	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
@@ -18,13 +20,43 @@ func (m *Manager) earliestElapsedForCACertsCleanup() (time.Duration, error) {
 	return m.earliestElapsedForCleanup(cas, m.caOverlapDuration)
 }
 
+// earliestElapsedForServiceCertsCleanup will iterate all the services and
+// retrieve the secrets associate, calculate the elapsed time for
+// cleanup for each and return the min.
+func (m *Manager) earliestElapsedForServiceCertsCleanup() (time.Duration, error) {
+	webhookConf, err := m.readyWebhookConfiguration()
+	if err != nil {
+		return time.Duration(0), fmt.Errorf("failed getting webhook configuration to calculate cleanup next run: %w", err)
+	}
+
+	services, err := m.getServicesFromConfiguration(webhookConf)
+	if err != nil {
+		return time.Duration(0), fmt.Errorf("failed getting services to calculate cleanup next run: %w", err)
+	}
+
+	elapsedTimesForCleanup := []time.Duration{}
+	for service, _ := range services {
+
+		certs, err := m.getTLSCerts(service)
+		if err != nil {
+			return time.Duration(0), fmt.Errorf("failed getting TLS keypair from service %s to calculate cleanup next run: %w", service, err)
+		}
+		elapsedTimeForCleanup, err := m.earliestElapsedForCleanup(certs, m.serviceOverlapDuration)
+		if err != nil {
+			return time.Duration(0), err
+		}
+		elapsedTimesForCleanup = append(elapsedTimesForCleanup, elapsedTimeForCleanup)
+	}
+	return min(elapsedTimesForCleanup...), nil
+}
+
 // earliestElapsedForCleanup return a subtraction between earliestCleanupDeadline and
 // `now`
 func (m *Manager) earliestElapsedForCleanup(certificates []*x509.Certificate, overlapDuration time.Duration) (time.Duration, error) {
 	deadline := m.earliestCleanupDeadlineForCerts(certificates, overlapDuration)
 	now := m.now()
 	elapsedForCleanup := deadline.Sub(now)
-	m.log.Info(fmt.Sprintf("earliestElapsedForCleanup {now: %s, deadline: %s, elapsedForCleanup: %s}", now, deadline, elapsedForCleanup))
+	m.log.Info(fmt.Sprintf("earliestElapsedForCleanup {now: %s, overlap: %s, deadline: %s, elapsedForCleanup: %s}", now, overlapDuration, deadline, elapsedForCleanup))
 	return elapsedForCleanup, nil
 }
 
@@ -70,9 +102,41 @@ func (m *Manager) cleanUpCABundle() error {
 	return nil
 }
 
+func (m *Manager) cleanUpServiceCerts() error {
+	webhookConf, err := m.readyWebhookConfiguration()
+	if err != nil {
+		return fmt.Errorf("failed getting webhook configuration to do the cleanup: %w", err)
+	}
+
+	services, err := m.getServicesFromConfiguration(webhookConf)
+	if err != nil {
+		return fmt.Errorf("failed getting services to do the cleanup: %w", err)
+	}
+
+	for service, _ := range services {
+		m.applySecret(service, corev1.SecretTypeTLS, nil, func(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
+			certPEM, found := secret.Data[corev1.TLSCertKey]
+			if !found {
+				return nil, errors.Wrapf(err, "TLS cert not found at secret %s to clean up ", service)
+			}
+
+			certs, err := triple.ParseCertsPEM(certPEM)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed parsing TLS cert PEM at secret %s to clean up", service)
+			}
+
+			cleanedCerts := m.cleanUpCertificates(certs, m.serviceOverlapDuration)
+			pem := triple.EncodeCertsPEM(cleanedCerts)
+			secret.Data[corev1.TLSCertKey] = pem
+			return &secret, nil
+		})
+	}
+	return nil
+}
+
 func (m *Manager) cleanUpCertificates(certificates []*x509.Certificate, overlapDuration time.Duration) []*x509.Certificate {
 	logger := m.log.WithName("cleanUpCertificates")
-	logger.Info("Cleaning up expired or beyond overlap duration limit at CA bundle")
+	logger.Info("Cleaning up expired or beyond overlap duration limit at certificates")
 	// There is no overlap
 	if len(certificates) <= 1 {
 		return certificates
@@ -85,17 +149,17 @@ func (m *Manager) cleanUpCertificates(certificates []*x509.Certificate, overlapD
 		logger.Info("Checking certificate for cleanup", "now", now, "overlapDuration", overlapDuration, "NotBefore", certificate.NotBefore, "NotAfter", certificate.NotAfter)
 
 		// Expired certificate are cleaned up
-		caExpirationDate := certificate.NotAfter
-		if now.After(caExpirationDate) {
+		expirationDate := certificate.NotAfter
+		if now.After(expirationDate) {
 			logger.Info("Cleaning up expired certificate", "now", now, "NotBefore", certificate.NotBefore, "NotAfter", certificate.NotAfter)
 			continue
 		}
 
-		// Clean up certificates that pass CA Overlap Duration limit,
+		// Clean up certificates that pass Overlap Duration limit,
 		// except for the last appended one (i.e. the last generated from a rotation) since we need at least one valid certificate
-		caOverlapDate := certificate.NotBefore.Add(overlapDuration)
-		if i != len(certificates)-1 && !now.Before(caOverlapDate) {
-			logger.Info("Cleaning up certificate beyond CA overlap duration", "now", now, "overlapDuration", overlapDuration, "NotBefore", certificate.NotBefore, "NotAfter", certificate.NotAfter)
+		overlapDate := certificate.NotBefore.Add(overlapDuration)
+		if i != len(certificates)-1 && !now.Before(overlapDate) {
+			logger.Info("Cleaning up certificate beyond overlap duration", "now", now, "overlapDuration", overlapDuration, "NotBefore", certificate.NotBefore, "NotAfter", certificate.NotAfter)
 			continue
 		}
 		cleanedUpCertificates = append(cleanedUpCertificates, certificate)
