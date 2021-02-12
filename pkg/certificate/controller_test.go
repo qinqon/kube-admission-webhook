@@ -334,10 +334,7 @@ var _ = Describe("Certificates controller", func() {
 										cas, err := triple.ParseCertsPEM(currentTLS.caBundle)
 										Expect(err).To(Succeed(), "should succeed parssing caBundle")
 										Expect(cas).To(HaveLen(1), "should have cleandup CA bundle with expired certificates gone")
-
-										earliestElapsedForServiceCertsCleanup, err := mgr.earliestElapsedForServiceCertsCleanup()
-										Expect(err).ToNot(HaveOccurred())
-										Expect(currentResult.RequeueAfter).To(Equal(earliestElapsedForServiceCertsCleanup), "should schedule new Reconcile after service cert rotation to cleanup overlap")
+										Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after CA cleanup to rotate service cert")
 									})
 								})
 							})
@@ -410,9 +407,10 @@ var _ = Describe("Certificates controller", func() {
 			BeforeEach(func() {
 				obtainedWebhookConfiguration := getWebhookConfiguration()
 				obtainedWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = []byte{}
+				By("Removing CABundle field")
 				updateWebhookConfiguration(obtainedWebhookConfiguration)
 			})
-			FIt("should re-create CABundle", func() {
+			It("should re-create CABundle", func() {
 				isTLSEventuallyVerified().Should(Succeed(), "should eventually have a TLS secret")
 			})
 		})

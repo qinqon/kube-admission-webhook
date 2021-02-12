@@ -51,11 +51,24 @@ func addTLSCertificate(data map[string][]byte, cert *x509.Certificate) error {
 	return nil
 }
 
-func setTLSKey(data map[string][]byte, key *rsa.PrivateKey) {
-	data[corev1.TLSPrivateKeyKey] = triple.EncodePrivateKeyPEM(key)
+func setAnnotation(secret *corev1.Secret) {
+	if secret.Annotations == nil {
+		secret.Annotations = map[string]string{}
+	}
+	secret.Annotations[secretManagedAnnotatoinKey] = ""
 }
 
-func populateTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
+func resetTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
+	setAnnotation(&secret)
+
+	secret.Data = map[string][]byte{
+		corev1.TLSPrivateKeyKey: triple.EncodePrivateKeyPEM(keyPair.Key),
+		corev1.TLSCertKey:       triple.EncodeCertPEM(keyPair.Cert),
+	}
+	return &secret, nil
+}
+
+func appendTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
 	if secret.Annotations == nil {
 		secret.Annotations = map[string]string{}
 	}
@@ -70,13 +83,17 @@ func populateTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.S
 		return nil, err
 	}
 
-	setTLSKey(secret.Data, keyPair.Key)
+	secret.Data[corev1.TLSPrivateKeyKey] = triple.EncodePrivateKeyPEM(keyPair.Key)
 
 	return &secret, nil
 }
 
-func (m *Manager) applyTLSSecret(secret types.NamespacedName, keyPair *triple.KeyPair) error {
-	return m.applySecret(secret, corev1.SecretTypeTLS, keyPair, populateTLSSecret)
+func (m *Manager) resetAndApplyTLSSecret(secret types.NamespacedName, keyPair *triple.KeyPair) error {
+	return m.applySecret(secret, corev1.SecretTypeTLS, keyPair, resetTLSSecret)
+}
+
+func (m *Manager) appendAndApplyTLSSecret(secret types.NamespacedName, keyPair *triple.KeyPair) error {
+	return m.applySecret(secret, corev1.SecretTypeTLS, keyPair, appendTLSSecret)
 }
 
 func (m *Manager) applyCASecret(keyPair *triple.KeyPair) error {

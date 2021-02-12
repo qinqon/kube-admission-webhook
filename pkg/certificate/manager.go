@@ -149,7 +149,8 @@ func (m *Manager) rotateAll() error {
 		return errors.Wrap(err, "failed storing CA cert/key at secret")
 	}
 
-	err = m.rotateServices()
+	// We have rotate the CA we need to reset the TLS removing previous certs
+	err = m.rotateServicesWithoutOverlap()
 	if err != nil {
 		return errors.Wrap(err, "failed rotating services")
 	}
@@ -157,7 +158,15 @@ func (m *Manager) rotateAll() error {
 	return nil
 }
 
-func (m *Manager) rotateServices() error {
+func (m *Manager) rotateServicesWithoutOverlap() error {
+	return m.rotateServices((*Manager).resetAndApplyTLSSecret)
+}
+
+func (m *Manager) rotateServicesWithOverlap() error {
+	return m.rotateServices((*Manager).appendAndApplyTLSSecret)
+}
+
+func (m *Manager) rotateServices(applyFn func(*Manager, types.NamespacedName, *triple.KeyPair) error) error {
 	m.log.Info("Rotating Services cert/key")
 
 	webhook, err := m.readyWebhookConfiguration()
@@ -189,7 +198,7 @@ func (m *Manager) rotateServices() error {
 		if err != nil {
 			return errors.Wrapf(err, "failed creating server key/cert for service %+v", service)
 		}
-		err = m.applyTLSSecret(service, keyPair)
+		err = applyFn(m, service, keyPair)
 		if err != nil {
 			return errors.Wrapf(err, "failed applying TLS secret %s", service)
 		}

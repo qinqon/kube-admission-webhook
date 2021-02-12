@@ -123,7 +123,7 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 
 	} else if elapsedToRotateServices <= 0 {
 		// CA is ok but expiration but we have passed expiration time for service certificates
-		err := m.rotateServices()
+		err := m.rotateServicesWithOverlap()
 		if err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "failed rotating services certs")
 		}
