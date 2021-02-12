@@ -2,6 +2,7 @@ package certificate
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -126,15 +127,21 @@ var _ = Describe("Certificates controller", func() {
 		var (
 			previousResult, currentResult reconcile.Result
 			previousTLS, currentTLS       TLS
+			backToTheFuture               = func(step string, future time.Duration) {
+				previousTLS = currentTLS
+				previousResult = currentResult
+				now = mgr.now().Add(future)
+				mgr.now = func() time.Time { return now }
+				triple.Now = mgr.now
+				var err error
+				By(fmt.Sprintf("%s t: %s", step, future))
+				currentResult, err = mgr.Reconcile(reconcile.Request{})
+				Expect(err).To(Succeed(), "should success reconciling")
+				currentTLS = getTLS()
+			}
 		)
 		BeforeEach(func() {
-			mgr.now = func() time.Time { return now }
-			triple.Now = mgr.now
-			var err error
-			By("Reconcile for the first time")
-			currentResult, err = mgr.Reconcile(reconcile.Request{})
-			Expect(err).To(Succeed(), "should success reconciling")
-			currentTLS = getTLS()
+			backToTheFuture("Reconcile for the first time", 0)
 		})
 
 		It("should create TLS cert/key with proper annotation and return proper deadline", func() {
@@ -145,17 +152,7 @@ var _ = Describe("Certificates controller", func() {
 		})
 		Context("and then called in the middle of service cert deadline", func() {
 			BeforeEach(func() {
-				previousTLS = currentTLS
-				previousResult = currentResult
-				now = mgr.now().Add(serviceCertDuration / 2)
-				mgr.now = func() time.Time { return now }
-				triple.Now = mgr.now
-				var err error
-				By("Reconcile in the middle of service cert deadline")
-				currentResult, err = mgr.Reconcile(reconcile.Request{})
-				Expect(err).To(Succeed(), "should success reconciling")
-
-				currentTLS = getTLS()
+				backToTheFuture("Reconcile in the middle of service cert deadline", serviceCertDuration/2)
 			})
 			It("should not rotate service cert and return a reduced deadline", func() {
 				Expect(currentResult.RequeueAfter).To(BeNumerically("<", previousResult.RequeueAfter), "should subsctract 'now' from service cert deadline at reconcile in the middle of service certificate duration")
@@ -165,17 +162,7 @@ var _ = Describe("Certificates controller", func() {
 
 			Context("and called at previous RequeueAfter (service cert rotation deadline)", func() {
 				BeforeEach(func() {
-					previousTLS = currentTLS
-					previousResult = currentResult
-					// Emulate controller-runtime timer by adding previous RequeueAfter values to previousNow
-					now = mgr.now().Add(previousResult.RequeueAfter)
-					mgr.now = func() time.Time { return now }
-					triple.Now = mgr.now
-					var err error
-					By("Reconcile at service cert rotation deadline")
-					currentResult, err = mgr.Reconcile(reconcile.Request{})
-					Expect(err).To(Succeed(), "should success reconciling")
-					currentTLS = getTLS()
+					backToTheFuture("Reconcile at service cert rotation deadline", currentResult.RequeueAfter)
 				})
 				It("should rotate service cert/key and return a new deadline", func() {
 					Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
@@ -195,17 +182,7 @@ var _ = Describe("Certificates controller", func() {
 				})
 				Context("and called at previous RequeueAfter (service certificate overlap cleanup)", func() {
 					BeforeEach(func() {
-						previousTLS = currentTLS
-						previousResult = currentResult
-						// Emulate controller-runtime timer by adding previous RequeueAfter values to previousNow
-						now = mgr.now().Add(previousResult.RequeueAfter)
-						mgr.now = func() time.Time { return now }
-						triple.Now = mgr.now
-						var err error
-						By("Reconcile at service certificate overlap cleanup")
-						currentResult, err = mgr.Reconcile(reconcile.Request{})
-						Expect(err).To(Succeed(), "should success reconciling")
-						currentTLS = getTLS()
+						backToTheFuture("Reconcile at service certificate overlap cleanup", currentResult.RequeueAfter)
 					})
 					It("should cleanup service cert, keeping service key and return a new deadline", func() {
 						Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
@@ -224,17 +201,7 @@ var _ = Describe("Certificates controller", func() {
 
 					Context("and called at previous RequeueAfter (second service cert rotation deadline)", func() {
 						BeforeEach(func() {
-							previousTLS = currentTLS
-							previousResult = currentResult
-							// Emulate controller-runtime timer by adding previous RequeueAfter values to previousNow
-							now = mgr.now().Add(previousResult.RequeueAfter)
-							mgr.now = func() time.Time { return now }
-							triple.Now = mgr.now
-							var err error
-							By("Reconcile at second service cert rotation deadline")
-							currentResult, err = mgr.Reconcile(reconcile.Request{})
-							Expect(err).To(Succeed(), "should success reconciling")
-							currentTLS = getTLS()
+							backToTheFuture("Reconcile at second service cert rotation deadline", currentResult.RequeueAfter)
 						})
 						It("should rotate service cert/key and return a new deadline", func() {
 							Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
@@ -254,17 +221,7 @@ var _ = Describe("Certificates controller", func() {
 						})
 						Context("and called at previous RequeueAfter (second service certificate overlap cleanup)", func() {
 							BeforeEach(func() {
-								previousTLS = currentTLS
-								previousResult = currentResult
-								// Emulate controller-runtime timer by adding previous RequeueAfter values to previousNow
-								now = mgr.now().Add(previousResult.RequeueAfter)
-								mgr.now = func() time.Time { return now }
-								triple.Now = mgr.now
-								var err error
-								By("Reconcile at second service certificate overlap cleanup")
-								currentResult, err = mgr.Reconcile(reconcile.Request{})
-								Expect(err).To(Succeed(), "should success reconciling")
-								currentTLS = getTLS()
+								backToTheFuture("Reconcile at second service certificate overlap cleanup", currentResult.RequeueAfter)
 							})
 							It("should rotate service cert/key and return a new deadline", func() {
 								Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
@@ -282,17 +239,7 @@ var _ = Describe("Certificates controller", func() {
 							})
 							Context("and called at previous RequeueAfter (ca cert rotation deadline)", func() {
 								BeforeEach(func() {
-									previousTLS = currentTLS
-									previousResult = currentResult
-									// Emulate controller-runtime timer by adding previous RequeueAfter values to previousNow
-									now = mgr.now().Add(previousResult.RequeueAfter)
-									mgr.now = func() time.Time { return now }
-									triple.Now = mgr.now
-									var err error
-									By("Reconcile at ca cert rotation deadline")
-									currentResult, err = mgr.Reconcile(reconcile.Request{})
-									Expect(err).To(Succeed(), "should success reconciling")
-									currentTLS = getTLS()
+									backToTheFuture("Reconcile at ca cert rotation deadline", currentResult.RequeueAfter)
 								})
 								It("should rotate CA and service certs and return new deadline", func() {
 									Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
@@ -312,16 +259,7 @@ var _ = Describe("Certificates controller", func() {
 								})
 								Context("and called again at previous RequeueAfter (ca cleanup deadline)", func() {
 									BeforeEach(func() {
-										previousTLS = currentTLS
-										previousResult = currentResult
-										now = mgr.now().Add(previousResult.RequeueAfter)
-										mgr.now = func() time.Time { return now }
-										triple.Now = mgr.now
-										var err error
-										By("Reconcile at ca cleanup deadline")
-										currentResult, err = mgr.Reconcile(reconcile.Request{})
-										Expect(err).To(Succeed(), "should success reconciling")
-										currentTLS = getTLS()
+										backToTheFuture("Reconcile at ca cleanup deadline", currentResult.RequeueAfter)
 									})
 									It("should remove expired CA certificates from caBundle", func() {
 										Expect(currentTLS.caBundle).ToNot(Equal(previousTLS.caBundle), "should have do a caBundle cleanup")
