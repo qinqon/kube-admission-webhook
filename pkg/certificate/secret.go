@@ -236,8 +236,6 @@ func (m *Manager) getTLSKeyPair(secretKey types.NamespacedName) (*triple.KeyPair
 		return nil, errors.Wrapf(err, "failed parsing TLS private key PEM at secret %s", secretKey)
 	}
 
-	// Certs are appended to implement overlap so we take the last one
-	// it will match with the key
 	lastAppendedCert := getLastCert(certs)
 
 	return &triple.KeyPair{Key: privateKey.(*rsa.PrivateKey), Cert: lastAppendedCert}, nil
@@ -267,6 +265,8 @@ func (m *Manager) caSecretKey() types.NamespacedName {
 	return types.NamespacedName{Namespace: m.namespace, Name: m.webhookName + "-ca"}
 }
 
+// Certs are appended to implement overlap so we take the last one
+// it will match with the key
 func getLastCert(certs []*x509.Certificate) *x509.Certificate {
 	if len(certs) == 0 {
 		return nil
