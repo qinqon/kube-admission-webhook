@@ -114,7 +114,7 @@ func (m *Manager) Reconcile(request reconcile.Request) (reconcile.Result, error)
 
 		// Re-calculate elapsedToRotate since we have generated new
 		// certificates
-		m.nextRotationDeadline()
+		m.nextRotationDeadlineForCA()
 		elapsedToRotateCA = m.elapsedToRotateCAFromLastDeadline()
 
 		// Also recalculate it for serices certificate since they has changed

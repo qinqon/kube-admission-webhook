@@ -250,10 +250,9 @@ func (m *Manager) nextRotationDeadlineForServices() time.Time {
 	return nextDeadline
 }
 
-// nextRotationDeadline returns a value for the threshold at which the
-// current certificate should be rotated, 80%+/-10% of the expiration of the
-// certificate or force rotation in case the certificate chain is faulty
-func (m *Manager) nextRotationDeadline() time.Time {
+// nextRotationDeadlineForCA verifty that TLS chain is ok, check rotation from
+// last certificate at CABundle using nextRotationDeadlineForCert
+func (m *Manager) nextRotationDeadlineForCA() time.Time {
 	err := m.verifyTLS()
 	if err != nil {
 		// Sprintf is used to prevent stack trace to be printed
@@ -296,7 +295,7 @@ func (m *Manager) elapsedToRotateCAFromLastDeadline() time.Duration {
 	if m.lastRotateDeadline != nil {
 		deadline = *m.lastRotateDeadline
 	} else {
-		deadline = m.nextRotationDeadline()
+		deadline = m.nextRotationDeadlineForCA()
 	}
 	now := m.now()
 	elapsedToRotate := deadline.Sub(now)
