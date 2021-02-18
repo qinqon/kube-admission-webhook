@@ -69,12 +69,9 @@ func resetTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secr
 }
 
 func appendTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
-	if secret.Annotations == nil {
-		secret.Annotations = map[string]string{}
-	}
-	secret.Annotations[secretManagedAnnotatoinKey] = ""
+	setAnnotation(&secret)
 
-	if len(secret.Data) == 0 {
+	if secret.Data == nil {
 		secret.Data = map[string][]byte{}
 	}
 
