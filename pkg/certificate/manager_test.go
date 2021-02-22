@@ -21,6 +21,7 @@ var _ = Describe("certificate manager", func() {
 	type nextRotationDeadlineForCertCase struct {
 		notBefore    time.Duration
 		notAfter     time.Duration
+		overlap      time.Duration
 		shouldRotate bool
 	}
 	DescribeTable("nextRotationDeadlineForCert",
@@ -29,7 +30,6 @@ var _ = Describe("certificate manager", func() {
 			now := time.Now()
 			notAfter := now.Add(c.notAfter)
 			notBefore := now.Add(c.notBefore)
-			defer func(original func(float64) time.Duration) { jitteryDuration = original }(jitteryDuration)
 			caCert := &x509.Certificate{
 				NotBefore: notBefore,
 				NotAfter:  notAfter,
@@ -39,42 +39,48 @@ var _ = Describe("certificate manager", func() {
 				log: log,
 			}
 			triple.Now = m.now
-			jitteryDuration = func(float64) time.Duration { return time.Duration(float64(notAfter.Sub(notBefore)) * 0.7) }
-			lowerBound := notBefore.Add(time.Duration(float64(notAfter.Sub(notBefore)) * 0.7))
 
-			deadline := m.nextRotationDeadlineForCert(caCert)
+			lowerBound := notBefore.Add(notAfter.Sub(notBefore) - c.overlap)
 
-			Expect(deadline).To(Equal(lowerBound), fmt.Sprintf("should match deadline for notBefore %v and notAfter %v", notBefore, notAfter))
+			deadline := m.nextRotationDeadlineForCert(caCert, c.overlap)
+
+			Expect(deadline).To(Equal(lowerBound), fmt.Sprintf("should match deadline for notBefore %v, notAfter %v and overlap %v", notBefore, notAfter, c.overlap))
 
 		},
 		Entry("just issued, still good", nextRotationDeadlineForCertCase{
 			notBefore:    -1 * time.Hour,
 			notAfter:     99 * time.Hour,
+			overlap:      10 * time.Hour,
 			shouldRotate: false,
 		}),
 		Entry("half way expired, still good", nextRotationDeadlineForCertCase{
 			notBefore:    -24 * time.Hour,
 			notAfter:     24 * time.Hour,
+			overlap:      10 * time.Hour,
 			shouldRotate: false,
 		}),
 		Entry("mostly expired, still good", nextRotationDeadlineForCertCase{
 			notBefore:    -69 * time.Hour,
 			notAfter:     31 * time.Hour,
+			overlap:      10 * time.Hour,
 			shouldRotate: false,
 		}),
 		Entry("just about expired, should rotate", nextRotationDeadlineForCertCase{
 			notBefore:    -91 * time.Hour,
 			notAfter:     9 * time.Hour,
+			overlap:      10 * time.Hour,
 			shouldRotate: true,
 		}),
 		Entry("nearly expired, should rotate", nextRotationDeadlineForCertCase{
 			notBefore:    -99 * time.Hour,
 			notAfter:     1 * time.Hour,
+			overlap:      10 * time.Hour,
 			shouldRotate: true,
 		}),
 		Entry("already expired, should rotate", nextRotationDeadlineForCertCase{
 			notBefore:    -10 * time.Hour,
 			notAfter:     -1 * time.Hour,
+			overlap:      10 * time.Hour,
 			shouldRotate: true,
 		}),
 		Entry("long duration", nextRotationDeadlineForCertCase{

@@ -2,6 +2,7 @@ package certificate
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -24,8 +25,10 @@ var (
 
 var _ = Describe("Certificates controller", func() {
 	var (
-		caCertDuration          = 1 * time.Hour
+		caCertDuration          = 70 * time.Minute
+		caOverlapDuration       = caCertDuration / 10
 		serviceCertDuration     = 30 * time.Minute
+		serviceOverlapDuration  = serviceCertDuration / 10
 		mgr                     *Manager
 		now                     time.Time
 		isTLSEventuallyVerified = func() AsyncAssertion {
@@ -66,7 +69,15 @@ var _ = Describe("Certificates controller", func() {
 	BeforeEach(func() {
 
 		var err error
-		mgr, err = NewManager(cli, Options{WebhookName: expectedMutatingWebhookConfiguration.Name, WebhookType: MutatingWebhook, Namespace: expectedNamespace.Name, CARotateInterval: caCertDuration, CertRotateInterval: serviceCertDuration})
+		mgr, err = NewManager(cli, Options{
+			WebhookName:         expectedMutatingWebhookConfiguration.Name,
+			WebhookType:         MutatingWebhook,
+			Namespace:           expectedNamespace.Name,
+			CARotateInterval:    caCertDuration,
+			CAOverlapInterval:   caOverlapDuration,
+			CertRotateInterval:  serviceCertDuration,
+			CertOverlapInterval: serviceOverlapDuration,
+		})
 		Expect(err).To(Succeed(), "should succeed constructing certificate manager")
 		// Freeze time
 		now = time.Now()
@@ -116,15 +127,21 @@ var _ = Describe("Certificates controller", func() {
 		var (
 			previousResult, currentResult reconcile.Result
 			previousTLS, currentTLS       TLS
+			backToTheFuture               = func(step string, future time.Duration) {
+				previousTLS = currentTLS
+				previousResult = currentResult
+				now = mgr.now().Add(future)
+				mgr.now = func() time.Time { return now }
+				triple.Now = mgr.now
+				var err error
+				By(fmt.Sprintf("%s t: %s", step, future))
+				currentResult, err = mgr.Reconcile(reconcile.Request{})
+				Expect(err).To(Succeed(), "should success reconciling")
+				currentTLS = getTLS()
+			}
 		)
 		BeforeEach(func() {
-			mgr.now = func() time.Time { return now }
-			triple.Now = mgr.now
-			var err error
-			By("Reconcile for the first time")
-			currentResult, err = mgr.Reconcile(reconcile.Request{})
-			Expect(err).To(Succeed(), "should success reconciling")
-			currentTLS = getTLS()
+			backToTheFuture("Reconcile for the first time", 0)
 		})
 
 		It("should create TLS cert/key with proper annotation and return proper deadline", func() {
@@ -135,17 +152,7 @@ var _ = Describe("Certificates controller", func() {
 		})
 		Context("and then called in the middle of service cert deadline", func() {
 			BeforeEach(func() {
-				previousTLS = currentTLS
-				previousResult = currentResult
-				now = mgr.now().Add(serviceCertDuration / 2)
-				mgr.now = func() time.Time { return now }
-				triple.Now = mgr.now
-				var err error
-				By("Reconcile in the middle of service cert deadline")
-				currentResult, err = mgr.Reconcile(reconcile.Request{})
-				Expect(err).To(Succeed(), "should success reconciling")
-
-				currentTLS = getTLS()
+				backToTheFuture("Reconcile in the middle of service cert deadline", serviceCertDuration/2)
 			})
 			It("should not rotate service cert and return a reduced deadline", func() {
 				Expect(currentResult.RequeueAfter).To(BeNumerically("<", previousResult.RequeueAfter), "should subsctract 'now' from service cert deadline at reconcile in the middle of service certificate duration")
@@ -155,17 +162,7 @@ var _ = Describe("Certificates controller", func() {
 
 			Context("and called at previous RequeueAfter (service cert rotation deadline)", func() {
 				BeforeEach(func() {
-					previousTLS = currentTLS
-					previousResult = currentResult
-					// Emulate controller-runtime timer by adding previous RequeueAfter values to previousNow
-					now = mgr.now().Add(previousResult.RequeueAfter)
-					mgr.now = func() time.Time { return now }
-					triple.Now = mgr.now
-					var err error
-					By("Reconcile at service cert rotation deadline")
-					currentResult, err = mgr.Reconcile(reconcile.Request{})
-					Expect(err).To(Succeed(), "should success reconciling")
-					currentTLS = getTLS()
+					backToTheFuture("Reconcile at service cert rotation deadline", currentResult.RequeueAfter)
 				})
 				It("should rotate service cert/key and return a new deadline", func() {
 					Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
@@ -175,161 +172,184 @@ var _ = Describe("Certificates controller", func() {
 					Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 					Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
 					Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
-					Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after service cert rotation to rotate service cert again")
+					earliestElapsedForServiceCertsCleanup, err := mgr.earliestElapsedForServiceCertsCleanup()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(currentResult.RequeueAfter).To(Equal(earliestElapsedForServiceCertsCleanup), "should schedule new Reconcile after service cert rotation to cleanup overlap")
+
+					certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
+					Expect(err).To(Succeed(), "should succeed parsing service certificates")
+					Expect(certs).To(HaveLen(2), "should overlap service certs")
 				})
-				Context("and called at previous RequeueAfter (second service cert rotation deadline)", func() {
+				Context("and called at previous RequeueAfter (service certificate overlap cleanup)", func() {
 					BeforeEach(func() {
-						previousTLS = currentTLS
-						previousResult = currentResult
-						// Emulate controller-runtime timer by adding previous RequeueAfter values to previousNow
-						now = mgr.now().Add(previousResult.RequeueAfter)
-						mgr.now = func() time.Time { return now }
-						triple.Now = mgr.now
-						var err error
-						By("Reconcile at second service cert rotation deadline")
-						currentResult, err = mgr.Reconcile(reconcile.Request{})
-						Expect(err).To(Succeed(), "should success reconciling")
-						currentTLS = getTLS()
+						backToTheFuture("Reconcile at service certificate overlap cleanup", currentResult.RequeueAfter)
 					})
-					It("should rotate service cert/key and return a new deadline", func() {
+					It("should cleanup service cert, keeping service key and return a new deadline", func() {
 						Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
-						Expect(currentTLS.servicePrivateKey).ToNot(Equal(previousTLS.servicePrivateKey), "should have do a TLS key rotation")
+						Expect(currentTLS.servicePrivateKey).To(Equal(previousTLS.servicePrivateKey), "should have not do a TLS key rotation")
 						Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations), "should containe same secret annotations")
 						Expect(currentTLS.caBundle).To(Equal(previousTLS.caBundle), "shouldn't have rotate CABundle ")
 						Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 						Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
 						Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
-						Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateCAFromLastDeadline()), "should schedule new Reconcile after service cert rotation to rotate service cert again")
+						Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after service cert rotation to rotate service cert again")
+
+						certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
+						Expect(err).To(Succeed(), "should succeed parsing service certificates")
+						Expect(certs).To(HaveLen(1), "should have cleanup overlap service certs")
 					})
-					Context("and called at previous RequeueAfter (ca cert rotation deadline)", func() {
+
+					Context("and called at previous RequeueAfter (second service cert rotation deadline)", func() {
 						BeforeEach(func() {
-							previousTLS = currentTLS
-							previousResult = currentResult
-							// Emulate controller-runtime timer by adding previous RequeueAfter values to previousNow
-							now = mgr.now().Add(previousResult.RequeueAfter)
-							mgr.now = func() time.Time { return now }
-							triple.Now = mgr.now
-							var err error
-							By("Reconcile at ca cert rotation deadline")
-							currentResult, err = mgr.Reconcile(reconcile.Request{})
-							Expect(err).To(Succeed(), "should success reconciling")
-							currentTLS = getTLS()
+							backToTheFuture("Reconcile at second service cert rotation deadline", currentResult.RequeueAfter)
 						})
-						It("should rotate CA and service certs and return new deadline", func() {
+						It("should rotate service cert/key and return a new deadline", func() {
 							Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
 							Expect(currentTLS.servicePrivateKey).ToNot(Equal(previousTLS.servicePrivateKey), "should have do a TLS key rotation")
 							Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations), "should containe same secret annotations")
-							Expect(currentTLS.caBundle).ToNot(Equal(previousTLS.caBundle), "should have rotate CABundle ")
-							Expect(currentTLS.caCertificate).ToNot(Equal(previousTLS.caCertificate), "should have rotate CA certificate")
-							Expect(currentTLS.caPrivateKey).ToNot(Equal(previousTLS.caPrivateKey), "should have rotate CA key rotation")
+							Expect(currentTLS.caBundle).To(Equal(previousTLS.caBundle), "shouldn't have rotate CABundle ")
+							Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
+							Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
+							Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
+							earliestElapsedForServiceCertsCleanup, err := mgr.earliestElapsedForServiceCertsCleanup()
+							Expect(err).ToNot(HaveOccurred())
+							Expect(currentResult.RequeueAfter).To(Equal(earliestElapsedForServiceCertsCleanup), "should schedule new Reconcile after service cert rotation to cleanup overlap")
 
-							elapsedForCleanup, err := mgr.earliestElapsedForCleanup()
-							Expect(err).To(Succeed(), "should succeed calculating earliestElapsedForCleanup")
-							Expect(currentResult.RequeueAfter).To(Equal(elapsedForCleanup), "Reconcile at rotate should schedule next Reconcile to do the CA overlapping cleanup")
-
-							cas, err := triple.ParseCertsPEM(currentTLS.caBundle)
-							Expect(err).To(Succeed(), "should succeed parssing caBundle")
-							Expect(cas).To(HaveLen(2), "should overlap CAs")
+							certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
+							Expect(err).To(Succeed(), "should succeed parsing service certificates")
+							Expect(certs).To(HaveLen(2), "should have service cert overlap")
 						})
-						Context("and called again at previous RequeueAfter (cleanup deadline)", func() {
+						Context("and called at previous RequeueAfter (second service certificate overlap cleanup)", func() {
 							BeforeEach(func() {
-								previousTLS = currentTLS
-								previousResult = currentResult
-								now = mgr.now().Add(previousResult.RequeueAfter)
-								mgr.now = func() time.Time { return now }
-								triple.Now = mgr.now
-								var err error
-								By("Reconcile at cleanup deadline")
-								currentResult, err = mgr.Reconcile(reconcile.Request{})
-								Expect(err).To(Succeed(), "should success reconciling")
-								currentTLS = getTLS()
+								backToTheFuture("Reconcile at second service certificate overlap cleanup", currentResult.RequeueAfter)
 							})
-							It("should remove expired CA certificates from caBundle", func() {
-								Expect(currentTLS.caBundle).ToNot(Equal(previousTLS.caBundle), "should have do a caBundle cleanup")
-								Expect(currentTLS.serviceCertificate).To(Equal(previousTLS.serviceCertificate), "should containe same TLS cert")
-								Expect(currentTLS.servicePrivateKey).To(Equal(previousTLS.servicePrivateKey), "should containe same TLS key")
+							It("should rotate service cert/key and return a new deadline", func() {
+								Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
+								Expect(currentTLS.servicePrivateKey).To(Equal(previousTLS.servicePrivateKey), "should have do a TLS key rotation")
 								Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations), "should containe same secret annotations")
+								Expect(currentTLS.caBundle).To(Equal(previousTLS.caBundle), "shouldn't have rotate CABundle ")
 								Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 								Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
+								Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
+								Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateCAFromLastDeadline()), "should schedule new Reconcile after service cert rotation to rotate CA cert")
 
-								cas, err := triple.ParseCertsPEM(currentTLS.caBundle)
-								Expect(err).To(Succeed(), "should succeed parssing caBundle")
-								Expect(cas).To(HaveLen(1), "should have cleandup CA bundle with expired certificates gone")
+								certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
+								Expect(err).To(Succeed(), "should succeed parsing service certificates")
+								Expect(certs).To(HaveLen(1), "should have cleanup overlap service certs")
+							})
+							Context("and called at previous RequeueAfter (ca cert rotation deadline)", func() {
+								BeforeEach(func() {
+									backToTheFuture("Reconcile at ca cert rotation deadline", currentResult.RequeueAfter)
+								})
+								It("should rotate CA and service certs and return new deadline", func() {
+									Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
+									Expect(currentTLS.servicePrivateKey).ToNot(Equal(previousTLS.servicePrivateKey), "should have do a TLS key rotation")
+									Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations), "should containe same secret annotations")
+									Expect(currentTLS.caBundle).ToNot(Equal(previousTLS.caBundle), "should have rotate CABundle ")
+									Expect(currentTLS.caCertificate).ToNot(Equal(previousTLS.caCertificate), "should have rotate CA certificate")
+									Expect(currentTLS.caPrivateKey).ToNot(Equal(previousTLS.caPrivateKey), "should have rotate CA key rotation")
 
-								Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after ca overlapping cleanup to rotate service cert")
+									elapsedForCleanup, err := mgr.earliestElapsedForCACertsCleanup()
+									Expect(err).To(Succeed(), "should succeed calculating earliestElapsedForCACertsCleanup")
+									Expect(currentResult.RequeueAfter).To(Equal(elapsedForCleanup), "Reconcile at rotate should schedule next Reconcile to do the CA overlapping cleanup")
+
+									cas, err := triple.ParseCertsPEM(currentTLS.caBundle)
+									Expect(err).To(Succeed(), "should succeed parssing caBundle")
+									Expect(cas).To(HaveLen(2), "should overlap CAs")
+								})
+								Context("and called again at previous RequeueAfter (ca cleanup deadline)", func() {
+									BeforeEach(func() {
+										backToTheFuture("Reconcile at ca cleanup deadline", currentResult.RequeueAfter)
+									})
+									It("should remove expired CA certificates from caBundle", func() {
+										Expect(currentTLS.caBundle).ToNot(Equal(previousTLS.caBundle), "should have do a caBundle cleanup")
+										Expect(currentTLS.serviceCertificate).To(Equal(previousTLS.serviceCertificate), "should containe same TLS cert")
+										Expect(currentTLS.servicePrivateKey).To(Equal(previousTLS.servicePrivateKey), "should containe same TLS key")
+										Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations), "should containe same secret annotations")
+										Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
+										Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
+
+										cas, err := triple.ParseCertsPEM(currentTLS.caBundle)
+										Expect(err).To(Succeed(), "should succeed parssing caBundle")
+										Expect(cas).To(HaveLen(1), "should have cleandup CA bundle with expired certificates gone")
+										Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after CA cleanup to rotate service cert")
+									})
+								})
 							})
 						})
 					})
 				})
+
 			})
 		})
-		Context("when integrated into a controller-runtime manager and started", func() {
-			var (
-				crManager manager.Manager
-				stopCh    chan struct{}
-			)
-			BeforeEach(func(done Done) {
+	})
+	Context("when integrated into a controller-runtime manager and started", func() {
+		var (
+			crManager manager.Manager
+			stopCh    chan struct{}
+		)
+		BeforeEach(func(done Done) {
 
-				By("Creating new controller-runtime manager")
-				var err error
-				crManager, err = manager.New(testEnv.Config, manager.Options{MetricsBindAddress: "0"})
-				Expect(err).ToNot(HaveOccurred(), "should success creating controller-runtime manager")
+			By("Creating new controller-runtime manager")
+			var err error
+			crManager, err = manager.New(testEnv.Config, manager.Options{MetricsBindAddress: "0"})
+			Expect(err).ToNot(HaveOccurred(), "should success creating controller-runtime manager")
 
-				err = mgr.Add(crManager)
-				Expect(err).To(Succeed(), "should succeed adding the cert manager controller to the controller-runtime manager")
+			err = mgr.Add(crManager)
+			Expect(err).To(Succeed(), "should succeed adding the cert manager controller to the controller-runtime manager")
 
-				By("Starting controller-runtime manager")
-				stopCh = make(chan struct{})
-				go func() {
-					defer GinkgoRecover()
-					err = crManager.Start(stopCh)
-					Expect(err).To(Succeed(), "should success starting manager")
-				}()
+			By("Starting controller-runtime manager")
+			stopCh = make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				err = crManager.Start(stopCh)
+				Expect(err).To(Succeed(), "should success starting manager")
+			}()
 
-				By("Checking that the TLS secret is created")
-				isTLSSecretEventuallyPresent().Should(BeTrue(), "should eventually have the TLS secret")
-				close(done)
+			By("Checking that the TLS secret is created")
+			isTLSSecretEventuallyPresent().Should(BeTrue(), "should eventually have the TLS secret")
+			close(done)
 
-				By("Wait a little for Reconcile to settle after mutatingwebhook configuration reconcile")
-				time.Sleep(3 * time.Second)
-			}, 10)
-			AfterEach(func() {
-				close(stopCh)
+			By("Wait a little for Reconcile to settle after mutatingwebhook configuration reconcile")
+			time.Sleep(3 * time.Second)
+		}, 10)
+		AfterEach(func() {
+			close(stopCh)
+		})
+		Context("and TLS secret is deleted", func() {
+			BeforeEach(func() {
+				By("Delete the TLS secret")
+				err := cli.Delete(context.TODO(), &expectedSecret)
+				Expect(err).To(Succeed(), "should succeed deleteing TLS secret")
+				By("Checking that the TLS secret is deleted")
+				isTLSSecretEventuallyPresent().Should(BeFalse(), "should eventually delete the TLS secret")
 			})
-			Context("and TLS secret is deleted", func() {
-				BeforeEach(func() {
-					By("Delete the TLS secret")
-					err := cli.Delete(context.TODO(), &expectedSecret)
-					Expect(err).To(Succeed(), "should succeed deleteing TLS secret")
-					By("Checking that the TLS secret is deleted")
-					isTLSSecretEventuallyPresent().Should(BeFalse(), "should eventually delete the TLS secret")
-				})
-				It("should re-create TLS secret", func() {
-					isTLSEventuallyVerified().Should(Succeed(), "should eventually have a TLS secret")
-				})
+			It("should re-create TLS secret", func() {
+				isTLSEventuallyVerified().Should(Succeed(), "should eventually have a TLS secret")
 			})
-			Context("and CA secret is deleted", func() {
-				BeforeEach(func() {
-					By("Delete the CA secret")
-					err := cli.Delete(context.TODO(), &expectedCASecret)
-					Expect(err).To(Succeed(), "should succeed deleteing CA secret")
-					By("Checking that the CA secret is deleted")
-					isCASecretEventuallyPresent().Should(BeFalse(), "should eventually delete the CA secret")
-				})
-				It("should re-create CA secret", func() {
-					isTLSEventuallyVerified().Should(Succeed(), "should eventually have a CA secret")
-				})
+		})
+		Context("and CA secret is deleted", func() {
+			BeforeEach(func() {
+				By("Delete the CA secret")
+				err := cli.Delete(context.TODO(), &expectedCASecret)
+				Expect(err).To(Succeed(), "should succeed deleteing CA secret")
+				By("Checking that the CA secret is deleted")
+				isCASecretEventuallyPresent().Should(BeFalse(), "should eventually delete the CA secret")
 			})
+			It("should re-create CA secret", func() {
+				isTLSEventuallyVerified().Should(Succeed(), "should eventually have a CA secret")
+			})
+		})
 
-			Context("and CABundle is reset", func() {
-				BeforeEach(func() {
-					obtainedWebhookConfiguration := getWebhookConfiguration()
-					obtainedWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = []byte{}
-					updateWebhookConfiguration(obtainedWebhookConfiguration)
-				})
-				It("should re-create CABundle", func() {
-					isTLSEventuallyVerified().Should(Succeed(), "should eventually have a TLS secret")
-				})
+		Context("and CABundle is reset", func() {
+			BeforeEach(func() {
+				obtainedWebhookConfiguration := getWebhookConfiguration()
+				obtainedWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = []byte{}
+				By("Removing CABundle field")
+				updateWebhookConfiguration(obtainedWebhookConfiguration)
+			})
+			It("should re-create CABundle", func() {
+				isTLSEventuallyVerified().Should(Succeed(), "should eventually have a TLS secret")
 			})
 		})
 	})
