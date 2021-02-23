@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -141,18 +141,18 @@ var _ = Describe("certificate manager", func() {
 		ExpectWithOffset(1, err).To(Succeed(), "should success deleting secret")
 	}
 
-	loadMutatingWebhook := func(manager *Manager) admissionregistrationv1beta1.MutatingWebhookConfiguration {
+	loadMutatingWebhook := func(manager *Manager) admissionregistrationv1.MutatingWebhookConfiguration {
 		webhookKey := types.NamespacedName{
 			Namespace: expectedMutatingWebhookConfiguration.ObjectMeta.Namespace,
 			Name:      expectedMutatingWebhookConfiguration.ObjectMeta.Name,
 		}
-		obtainedMutatingWebhookConfiguration := admissionregistrationv1beta1.MutatingWebhookConfiguration{}
+		obtainedMutatingWebhookConfiguration := admissionregistrationv1.MutatingWebhookConfiguration{}
 		err := manager.client.Get(context.TODO(), webhookKey, &obtainedMutatingWebhookConfiguration)
 		ExpectWithOffset(1, err).To(Succeed(), "should success getting mutatingwebhookconfiguration")
 		return obtainedMutatingWebhookConfiguration
 	}
 
-	updateMutatingWebhook := func(manager *Manager, mutatingWebhookConfigurationToUpdate *admissionregistrationv1beta1.MutatingWebhookConfiguration) {
+	updateMutatingWebhook := func(manager *Manager, mutatingWebhookConfigurationToUpdate *admissionregistrationv1.MutatingWebhookConfiguration) {
 		err := manager.client.Update(context.TODO(), mutatingWebhookConfigurationToUpdate)
 		ExpectWithOffset(1, err).To(Succeed(), "should success updating mutatingwebhookconfiguration")
 	}

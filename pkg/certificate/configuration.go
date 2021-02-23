@@ -10,7 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -20,12 +20,12 @@ import (
 	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
 )
 
-func mutatingWebhookConfig(webhook client.Object) *admissionregistrationv1beta1.MutatingWebhookConfiguration {
-	return webhook.(*admissionregistrationv1beta1.MutatingWebhookConfiguration)
+func mutatingWebhookConfig(webhook client.Object) *admissionregistrationv1.MutatingWebhookConfiguration {
+	return webhook.(*admissionregistrationv1.MutatingWebhookConfiguration)
 }
 
-func validatingWebhookConfig(webhook client.Object) *admissionregistrationv1beta1.ValidatingWebhookConfiguration {
-	return webhook.(*admissionregistrationv1beta1.ValidatingWebhookConfiguration)
+func validatingWebhookConfig(webhook client.Object) *admissionregistrationv1.ValidatingWebhookConfiguration {
+	return webhook.(*admissionregistrationv1.ValidatingWebhookConfiguration)
 }
 
 // clientConfigList returns the the list of webhooks's mutation or validating WebhookClientConfig
@@ -34,8 +34,8 @@ func validatingWebhookConfig(webhook client.Object) *admissionregistrationv1beta
 // that uses the interface client.Object and do some type checking to access it [1].
 //
 // [1] https://godoc.org/k8s.io/kubernetes/pkg/apis/admissionregistration#WebhookClientConfig
-func (m *Manager) clientConfigList(webhook client.Object) []*admissionregistrationv1beta1.WebhookClientConfig {
-	clientConfigList := []*admissionregistrationv1beta1.WebhookClientConfig{}
+func (m *Manager) clientConfigList(webhook client.Object) []*admissionregistrationv1.WebhookClientConfig {
+	clientConfigList := []*admissionregistrationv1.WebhookClientConfig{}
 	if m.webhookType == MutatingWebhook {
 		mutatingWebhookConfig := mutatingWebhookConfig(webhook)
 		for i, _ := range mutatingWebhookConfig.Webhooks {
@@ -55,9 +55,9 @@ func (m *Manager) clientConfigList(webhook client.Object) []*admissionregistrati
 func (m *Manager) readyWebhookConfiguration() (client.Object, error) {
 	var webhook client.Object
 	if m.webhookType == MutatingWebhook {
-		webhook = &admissionregistrationv1beta1.MutatingWebhookConfiguration{}
+		webhook = &admissionregistrationv1.MutatingWebhookConfiguration{}
 	} else if m.webhookType == ValidatingWebhook {
-		webhook = &admissionregistrationv1beta1.ValidatingWebhookConfiguration{}
+		webhook = &admissionregistrationv1.ValidatingWebhookConfiguration{}
 	} else {
 		return nil, fmt.Errorf("Unknown webhook type %s", m.webhookType)
 	}

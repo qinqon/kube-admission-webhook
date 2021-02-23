@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -94,7 +94,7 @@ var _ = Describe("Certificates controller", func() {
 	}
 
 	getTLS := func() TLS {
-		obtainedWebhookConfiguration := admissionregistrationv1beta1.MutatingWebhookConfiguration{}
+		obtainedWebhookConfiguration := admissionregistrationv1.MutatingWebhookConfiguration{}
 		err := cli.Get(context.TODO(), types.NamespacedName{Name: "foowebhook"}, &obtainedWebhookConfiguration)
 		Expect(err).To(Succeed(), "should success getting mutatingwebhookconfiguration")
 
@@ -363,8 +363,8 @@ func getSecret() corev1.Secret {
 	return obtainedSecret
 }
 
-func getWebhookConfiguration() admissionregistrationv1beta1.MutatingWebhookConfiguration {
-	obtainedWebhookConfiguration := admissionregistrationv1beta1.MutatingWebhookConfiguration{}
+func getWebhookConfiguration() admissionregistrationv1.MutatingWebhookConfiguration {
+	obtainedWebhookConfiguration := admissionregistrationv1.MutatingWebhookConfiguration{}
 	err := cli.Get(context.TODO(), types.NamespacedName{
 		Namespace: expectedMutatingWebhookConfiguration.Namespace,
 		Name:      expectedMutatingWebhookConfiguration.Name,
@@ -373,7 +373,7 @@ func getWebhookConfiguration() admissionregistrationv1beta1.MutatingWebhookConfi
 	return obtainedWebhookConfiguration
 }
 
-func updateWebhookConfiguration(webhookConfiguration admissionregistrationv1beta1.MutatingWebhookConfiguration) {
+func updateWebhookConfiguration(webhookConfiguration admissionregistrationv1.MutatingWebhookConfiguration) {
 	err := cli.Update(context.TODO(), &webhookConfiguration)
 	Expect(err).To(Succeed(), "should succeed update mutatingwebhookconfiguration")
 }

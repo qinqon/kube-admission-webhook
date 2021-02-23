@@ -9,7 +9,7 @@ import (
 
 	"github.com/onsi/ginkgo/reporters"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,32 +29,35 @@ var (
 			Name: "foowebhook",
 		},
 	}
-	selectedScope = admissionregistrationv1beta1.NamespacedScope
+	selectedScope = admissionregistrationv1.NamespacedScope
 	servicePath   = "/mutatepod"
-	failurePolicy = admissionregistrationv1beta1.Fail
+	failurePolicy = admissionregistrationv1.Fail
+	sideEffects   = admissionregistrationv1.SideEffectClassNone
 	mutatepodURL  = "https://localhost:8443/mutatepod"
 
-	expectedMutatingWebhookConfiguration = admissionregistrationv1beta1.MutatingWebhookConfiguration{
+	expectedMutatingWebhookConfiguration = admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "foowebhook",
 		},
-		Webhooks: []admissionregistrationv1beta1.MutatingWebhook{
-			admissionregistrationv1beta1.MutatingWebhook{
+		Webhooks: []admissionregistrationv1.MutatingWebhook{
+			{
 				Name: "foowebhook.qinqon.io",
-				ClientConfig: admissionregistrationv1beta1.WebhookClientConfig{
+				ClientConfig: admissionregistrationv1.WebhookClientConfig{
 					URL: &mutatepodURL,
 				},
-				FailurePolicy: &failurePolicy,
-				Rules: []admissionregistrationv1beta1.RuleWithOperations{
+				FailurePolicy:           &failurePolicy,
+				SideEffects:             &sideEffects,
+				AdmissionReviewVersions: []string{"v1"},
+				Rules: []admissionregistrationv1.RuleWithOperations{
 					{
-						Rule: admissionregistrationv1beta1.Rule{
+						Rule: admissionregistrationv1.Rule{
 							APIGroups:   []string{""},
 							APIVersions: []string{"v1"},
 							Resources:   []string{"pods"},
 							Scope:       &selectedScope,
 						},
-						Operations: []admissionregistrationv1beta1.OperationType{
-							admissionregistrationv1beta1.Create,
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Create,
 						},
 					},
 				},

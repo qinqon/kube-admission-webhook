@@ -16,7 +16,7 @@ import (
 
 	"github.com/phayes/freeport"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +52,7 @@ var _ = Describe("Webhook server", func() {
 			Expect(err).To(Succeed(), "should succeed selectiong a free port")
 
 			freeportURL := strings.ReplaceAll(mutatepodURL, "8443", strconv.Itoa(freePort))
-			obtainedMutatingWebhookConfiguration := admissionregistrationv1beta1.MutatingWebhookConfiguration{}
+			obtainedMutatingWebhookConfiguration := admissionregistrationv1.MutatingWebhookConfiguration{}
 
 			err = cli.Get(context.TODO(), types.NamespacedName{Name: expectedMutatingWebhookConfiguration.Name}, &obtainedMutatingWebhookConfiguration)
 			Expect(err).To(Succeed(), "should succeed getting mutatingwebhookconfiguration")
