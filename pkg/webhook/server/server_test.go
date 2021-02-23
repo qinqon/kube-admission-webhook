@@ -32,7 +32,7 @@ var _ = Describe("Webhook server", func() {
 		var (
 			mgr     manager.Manager
 			certDir string
-			stopCh  chan struct{}
+			cancel  context.CancelFunc
 		)
 		BeforeEach(func(done Done) {
 
@@ -99,10 +99,11 @@ var _ = Describe("Webhook server", func() {
 			Expect(err).To(Succeed(), "should succeed adding the webhook server to the manager")
 
 			By("Starting controller-runtime manager")
-			stopCh = make(chan struct{})
+			var ctx context.Context
+			ctx, cancel = context.WithCancel(context.Background())
 			go func() {
 				defer GinkgoRecover()
-				err = mgr.Start(stopCh)
+				err = mgr.Start(ctx)
 				Expect(err).To(Succeed(), "should success starting manager")
 			}()
 
@@ -136,7 +137,7 @@ var _ = Describe("Webhook server", func() {
 		}, 10)
 
 		AfterEach(func() {
-			close(stopCh)
+			cancel()
 			deleteResources()
 			os.RemoveAll(certDir)
 		})

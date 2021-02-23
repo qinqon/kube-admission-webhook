@@ -15,7 +15,6 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 var (
@@ -125,7 +124,6 @@ var _ = AfterSuite(func() {
 
 func init() {
 	klog.InitFlags(nil)
-	logf.SetLogger(logf.ZapLogger(true))
 }
 
 func TestCertificate(t *testing.T) {

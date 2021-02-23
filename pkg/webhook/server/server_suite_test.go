@@ -15,8 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 var (
@@ -84,9 +82,6 @@ func deleteResources() {
 }
 
 var _ = BeforeSuite(func() {
-
-	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
-
 	testEnv = &envtest.Environment{
 		UseExistingCluster: &useCluster,
 	}

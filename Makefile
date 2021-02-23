@@ -56,6 +56,9 @@ test: $(GO) testenv
 pod:
 	$(GO) build -o $(BIN_DIR) ./pkg/... ./test/pod
 
+build:
+	$(GO) build ./pkg/...
+
 vendor: $(GO)
 	$(GO) mod tidy
 	$(GO) mod vendor
@@ -84,4 +87,5 @@ release: $(GITHUB_RELEASE)
 	prepare-minor \
 	prepare-major \
 	format \
-	vet
+	vet \
+	build

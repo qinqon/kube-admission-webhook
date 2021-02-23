@@ -12,9 +12,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 
 	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
 )
@@ -135,7 +135,7 @@ var _ = Describe("Certificates controller", func() {
 				triple.Now = mgr.now
 				var err error
 				By(fmt.Sprintf("%s t: %s", step, future))
-				currentResult, err = mgr.Reconcile(reconcile.Request{})
+				currentResult, err = mgr.Reconcile(context.Background(), reconcile.Request{})
 				Expect(err).To(Succeed(), "should success reconciling")
 				currentTLS = getTLS()
 			}
@@ -286,7 +286,7 @@ var _ = Describe("Certificates controller", func() {
 	Context("when integrated into a controller-runtime manager and started", func() {
 		var (
 			crManager manager.Manager
-			stopCh    chan struct{}
+			cancel    context.CancelFunc
 		)
 		BeforeEach(func(done Done) {
 
@@ -299,10 +299,11 @@ var _ = Describe("Certificates controller", func() {
 			Expect(err).To(Succeed(), "should succeed adding the cert manager controller to the controller-runtime manager")
 
 			By("Starting controller-runtime manager")
-			stopCh = make(chan struct{})
+			var ctx context.Context
+			ctx, cancel = context.WithCancel(context.Background())
 			go func() {
 				defer GinkgoRecover()
-				err = crManager.Start(stopCh)
+				err = crManager.Start(ctx)
 				Expect(err).To(Succeed(), "should success starting manager")
 			}()
 
@@ -314,7 +315,7 @@ var _ = Describe("Certificates controller", func() {
 			time.Sleep(3 * time.Second)
 		}, 10)
 		AfterEach(func() {
-			close(stopCh)
+			defer cancel()
 		})
 		Context("and TLS secret is deleted", func() {
 			BeforeEach(func() {
