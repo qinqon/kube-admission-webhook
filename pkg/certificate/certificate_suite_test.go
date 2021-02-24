@@ -9,13 +9,12 @@ import (
 
 	"github.com/onsi/ginkgo/reporters"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 var (
@@ -24,6 +23,8 @@ var (
 	//TODO: Read it from flag or put true if we have a
 	//      KUBECONFIG env var
 	useCluster = false
+
+	sideEffects = admissionregistrationv1.SideEffectClassNone
 
 	expectedNamespace = corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -38,7 +39,7 @@ var (
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
-				corev1.ServicePort{
+				{
 					Name: "https",
 					Port: 8443,
 				},
@@ -46,15 +47,17 @@ var (
 		},
 	}
 
-	expectedMutatingWebhookConfiguration = admissionregistrationv1beta1.MutatingWebhookConfiguration{
+	expectedMutatingWebhookConfiguration = admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "foowebhook",
 		},
-		Webhooks: []admissionregistrationv1beta1.MutatingWebhook{
-			admissionregistrationv1beta1.MutatingWebhook{
-				Name: "foowebhook.qinqon.io",
-				ClientConfig: admissionregistrationv1beta1.WebhookClientConfig{
-					Service: &admissionregistrationv1beta1.ServiceReference{
+		Webhooks: []admissionregistrationv1.MutatingWebhook{
+			{
+				SideEffects:             &sideEffects,
+				AdmissionReviewVersions: []string{"v1"},
+				Name:                    "foowebhook.qinqon.io",
+				ClientConfig: admissionregistrationv1.WebhookClientConfig{
+					Service: &admissionregistrationv1.ServiceReference{
 						Name:      expectedService.Name,
 						Namespace: expectedService.Namespace,
 					},
@@ -125,7 +128,6 @@ var _ = AfterSuite(func() {
 
 func init() {
 	klog.InitFlags(nil)
-	logf.SetLogger(logf.ZapLogger(true))
 }
 
 func TestCertificate(t *testing.T) {

@@ -53,8 +53,8 @@ testenv:
 test: $(GO) testenv
 	KUBEBUILDER_ASSETS=$(BIN_DIR) $(GO) test $(WHAT) -timeout 2m -ginkgo.v -ginkgo.noColor=false  -test.v
 
-pod:
-	$(GO) build -o $(BIN_DIR) ./pkg/... ./test/pod
+build:
+	$(GO) build ./pkg/...
 
 vendor: $(GO)
 	$(GO) mod tidy
@@ -84,4 +84,5 @@ release: $(GITHUB_RELEASE)
 	prepare-minor \
 	prepare-major \
 	format \
-	vet
+	vet \
+	build

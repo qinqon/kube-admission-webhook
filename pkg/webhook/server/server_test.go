@@ -16,7 +16,7 @@ import (
 
 	"github.com/phayes/freeport"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +32,7 @@ var _ = Describe("Webhook server", func() {
 		var (
 			mgr     manager.Manager
 			certDir string
-			stopCh  chan struct{}
+			cancel  context.CancelFunc
 		)
 		BeforeEach(func(done Done) {
 
@@ -52,7 +52,7 @@ var _ = Describe("Webhook server", func() {
 			Expect(err).To(Succeed(), "should succeed selectiong a free port")
 
 			freeportURL := strings.ReplaceAll(mutatepodURL, "8443", strconv.Itoa(freePort))
-			obtainedMutatingWebhookConfiguration := admissionregistrationv1beta1.MutatingWebhookConfiguration{}
+			obtainedMutatingWebhookConfiguration := admissionregistrationv1.MutatingWebhookConfiguration{}
 
 			err = cli.Get(context.TODO(), types.NamespacedName{Name: expectedMutatingWebhookConfiguration.Name}, &obtainedMutatingWebhookConfiguration)
 			Expect(err).To(Succeed(), "should succeed getting mutatingwebhookconfiguration")
@@ -99,10 +99,11 @@ var _ = Describe("Webhook server", func() {
 			Expect(err).To(Succeed(), "should succeed adding the webhook server to the manager")
 
 			By("Starting controller-runtime manager")
-			stopCh = make(chan struct{})
+			var ctx context.Context
+			ctx, cancel = context.WithCancel(context.Background())
 			go func() {
 				defer GinkgoRecover()
-				err = mgr.Start(stopCh)
+				err = mgr.Start(ctx)
 				Expect(err).To(Succeed(), "should success starting manager")
 			}()
 
@@ -136,7 +137,7 @@ var _ = Describe("Webhook server", func() {
 		}, 10)
 
 		AfterEach(func() {
-			close(stopCh)
+			cancel()
 			deleteResources()
 			os.RemoveAll(certDir)
 		})
