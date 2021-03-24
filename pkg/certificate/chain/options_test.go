@@ -1,4 +1,4 @@
-package certificate
+package chain
 
 import (
 	"time"
@@ -14,9 +14,9 @@ var _ = Describe("Certificate Options", func() {
 		expectedOptions Options
 		isValid         bool
 	}
-	DescribeTable("setDefaultsAndValidate",
+	DescribeTable("SetDefaultsAndValidate",
 		func(c setDefaultsAndValidateCase) {
-			err := c.options.setDefaultsAndValidate()
+			err := c.options.SetDefaultsAndValidate()
 			if c.isValid {
 				Expect(err).To(Succeed(), "should succeed validating the options")
 			} else {
@@ -24,91 +24,20 @@ var _ = Describe("Certificate Options", func() {
 			}
 			Expect(c.options).To(Equal(c.expectedOptions), "should equal expected options after setting defaults")
 		},
-		Entry("Empty options should be invalid since it's missing webhook name and namespace and set defaults", setDefaultsAndValidateCase{
-			isValid: false,
-		}),
-		Entry("Just passing webhook name options should be invalid since it's missing namespace and set default", setDefaultsAndValidateCase{
-			options: Options{
-				WebhookName: "MyWebhook",
-			},
+		Entry("Empty options should be valid", setDefaultsAndValidateCase{
 			expectedOptions: Options{
-				WebhookName: "MyWebhook",
-			},
-			isValid: false,
-		}),
-		Entry("Passing webhook name and namespace options should be valid and set default", setDefaultsAndValidateCase{
-			options: Options{
-				Namespace:   "MyNamespace",
-				WebhookName: "MyWebhook",
-			},
-			expectedOptions: Options{
-				Namespace:           "MyNamespace",
-				WebhookName:         "MyWebhook",
-				WebhookType:         MutatingWebhook,
 				CARotateInterval:    OneYearDuration,
 				CAOverlapInterval:   OneYearDuration,
 				CertRotateInterval:  OneYearDuration,
 				CertOverlapInterval: OneYearDuration,
 			},
 			isValid: true,
-		}),
-		Entry("Passing WebhookType ValidatingWebhook options should be valid", setDefaultsAndValidateCase{
-			options: Options{
-				Namespace:   "MyNamespace",
-				WebhookName: "MyWebhook",
-				WebhookType: ValidatingWebhook,
-			},
-			expectedOptions: Options{
-				Namespace:           "MyNamespace",
-				WebhookName:         "MyWebhook",
-				WebhookType:         ValidatingWebhook,
-				CARotateInterval:    OneYearDuration,
-				CAOverlapInterval:   OneYearDuration,
-				CertRotateInterval:  OneYearDuration,
-				CertOverlapInterval: OneYearDuration,
-			},
-			isValid: true,
-		}),
-		Entry("Passing WebhookType MutatingWebhook options should be valid", setDefaultsAndValidateCase{
-			options: Options{
-				Namespace:   "MyNamespace",
-				WebhookName: "MyWebhook",
-				WebhookType: MutatingWebhook,
-			},
-			expectedOptions: Options{
-				Namespace:           "MyNamespace",
-				WebhookName:         "MyWebhook",
-				WebhookType:         MutatingWebhook,
-				CARotateInterval:    OneYearDuration,
-				CAOverlapInterval:   OneYearDuration,
-				CertRotateInterval:  OneYearDuration,
-				CertOverlapInterval: OneYearDuration,
-			},
-			isValid: true,
-		}),
-		Entry("Passing unknown WebhookType should be invalid", setDefaultsAndValidateCase{
-			options: Options{
-				Namespace:   "MyNamespace",
-				WebhookName: "MyWebhook",
-				WebhookType: "BadWebhookType",
-			},
-			expectedOptions: Options{
-				Namespace:   "MyNamespace",
-				WebhookName: "MyWebhook",
-				WebhookType: "BadWebhookType",
-			},
-			isValid: false,
 		}),
 		Entry("CAOverlapInterval has to default to CARotateInterval", setDefaultsAndValidateCase{
 			options: Options{
-				Namespace:        "MyNamespace",
-				WebhookName:      "MyWebhook",
 				CARotateInterval: 2 * OneYearDuration,
 			},
 			expectedOptions: Options{
-				Namespace:           "MyNamespace",
-				WebhookName:         "MyWebhook",
-				WebhookType:         MutatingWebhook,
 				CARotateInterval:    2 * OneYearDuration,
 				CAOverlapInterval:   2 * OneYearDuration,
 				CertRotateInterval:  2 * OneYearDuration,
@@ -118,15 +47,10 @@ var _ = Describe("Certificate Options", func() {
 		}),
 		Entry("CertRotateInterval has to default to CARotateInterval", setDefaultsAndValidateCase{
 			options: Options{
-				Namespace:         "MyNamespace",
-				WebhookName:       "MyWebhook",
 				CARotateInterval:  2 * OneYearDuration,
 				CAOverlapInterval: 1 * OneYearDuration,
 			},
 			expectedOptions: Options{
-				Namespace:           "MyNamespace",
-				WebhookName:         "MyWebhook",
-				WebhookType:         MutatingWebhook,
 				CARotateInterval:    2 * OneYearDuration,
 				CAOverlapInterval:   1 * OneYearDuration,
 				CertRotateInterval:  2 * OneYearDuration,
@@ -136,16 +60,11 @@ var _ = Describe("Certificate Options", func() {
 		}),
 		Entry("CertOverlapInterval has to default to CertRotateInterval", setDefaultsAndValidateCase{
 			options: Options{
-				Namespace:          "MyNamespace",
-				WebhookName:        "MyWebhook",
 				CARotateInterval:   2 * OneYearDuration,
 				CAOverlapInterval:  1 * OneYearDuration,
 				CertRotateInterval: OneYearDuration / 2,
 			},
 			expectedOptions: Options{
-				Namespace:           "MyNamespace",
-				WebhookName:         "MyWebhook",
-				WebhookType:         MutatingWebhook,
 				CARotateInterval:    2 * OneYearDuration,
 				CAOverlapInterval:   1 * OneYearDuration,
 				CertRotateInterval:  OneYearDuration / 2,
@@ -156,14 +75,10 @@ var _ = Describe("Certificate Options", func() {
 
 		Entry("Passing CAOverlapInterval > CARotateInterval should be invalid", setDefaultsAndValidateCase{
 			options: Options{
-				Namespace:         "MyNamespace",
-				WebhookName:       "MyWebhook",
 				CARotateInterval:  1 * time.Hour,
 				CAOverlapInterval: 2 * time.Hour,
 			},
 			expectedOptions: Options{
-				Namespace:         "MyNamespace",
-				WebhookName:       "MyWebhook",
 				CARotateInterval:  1 * time.Hour,
 				CAOverlapInterval: 2 * time.Hour,
 			},
@@ -171,14 +86,10 @@ var _ = Describe("Certificate Options", func() {
 		}),
 		Entry("Passing CertRotateInterval > CARotateInterval should be invalid", setDefaultsAndValidateCase{
 			options: Options{
-				Namespace:          "MyNamespace",
-				WebhookName:        "MyWebhook",
 				CARotateInterval:   1 * time.Hour,
 				CertRotateInterval: 2 * time.Hour,
 			},
 			expectedOptions: Options{
-				Namespace:          "MyNamespace",
-				WebhookName:        "MyWebhook",
 				CARotateInterval:   1 * time.Hour,
 				CertRotateInterval: 2 * time.Hour,
 			},
@@ -186,14 +97,10 @@ var _ = Describe("Certificate Options", func() {
 		}),
 		Entry("Passing CertOverlapInterval > CertRotateInterval should be invalid", setDefaultsAndValidateCase{
 			options: Options{
-				Namespace:           "MyNamespace",
-				WebhookName:         "MyWebhook",
 				CertRotateInterval:  1 * time.Hour,
 				CertOverlapInterval: 2 * time.Hour,
 			},
 			expectedOptions: Options{
-				Namespace:           "MyNamespace",
-				WebhookName:         "MyWebhook",
 				CertRotateInterval:  1 * time.Hour,
 				CertOverlapInterval: 2 * time.Hour,
 			},
@@ -202,18 +109,12 @@ var _ = Describe("Certificate Options", func() {
 
 		Entry("Passing all options override defaults", setDefaultsAndValidateCase{
 			options: Options{
-				Namespace:           "MyNamespace",
-				WebhookName:         "MyWebhook",
-				WebhookType:         ValidatingWebhook,
 				CARotateInterval:    1 * time.Hour,
 				CAOverlapInterval:   1 * time.Minute,
 				CertRotateInterval:  30 * time.Minute,
 				CertOverlapInterval: 15 * time.Minute,
 			},
 			expectedOptions: Options{
-				Namespace:           "MyNamespace",
-				WebhookName:         "MyWebhook",
-				WebhookType:         ValidatingWebhook,
 				CARotateInterval:    1 * time.Hour,
 				CAOverlapInterval:   1 * time.Minute,
 				CertRotateInterval:  30 * time.Minute,

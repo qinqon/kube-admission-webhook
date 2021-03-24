@@ -2,8 +2,6 @@ package certificate
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	"github.com/pkg/errors"
 
@@ -35,12 +33,26 @@ func (m *Manager) add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	isAnnotatedResource := func(object client.Object) bool {
-		_, foundAnnotation := object.GetAnnotations()[secretManagedAnnotatoinKey]
+		_, foundAnnotation := object.GetAnnotations()[secretManagedAnnotationKey]
 		return foundAnnotation
 	}
 
 	isWebhookConfig := func(object client.Object) bool {
-		return object.GetName() == m.webhookName
+		var webhookType WebhookType
+		switch object.(type) {
+		case *admissionregistrationv1.MutatingWebhookConfiguration:
+			webhookType = MutatingWebhook
+		case *admissionregistrationv1.ValidatingWebhookConfiguration:
+			webhookType = ValidatingWebhook
+		default:
+			return false
+		}
+		for _, webhookRef := range m.webhooks {
+			if webhookRef.Name == object.GetName() && webhookRef.Type == webhookType {
+				return true
+			}
+		}
+		return false
 	}
 
 	// Watch only events for selected m.webhookName
@@ -80,114 +92,16 @@ func (m *Manager) add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
-// Reconcile reads that state of the cluster for a Node object and makes changes based on the state read
-// and what is in the Node.Spec
-// Note:
-// The Controller will requeue the Request to be processed again if the returned error is non-nil or
-// Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (m *Manager) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := m.log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name).WithName("Reconcile")
-	reqLogger.Info("Reconciling Certificates")
+	logger := m.log.WithName("Reconcile")
+	logger.Info("Incoming reconcile request", "Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
-	elapsedToRotateCA := m.elapsedToRotateCAFromLastDeadline()
-	elapsedToRotateServices := m.elapsedToRotateServicesFromLastDeadline()
-
-	// Ensure that this Reconcile is not called after bad changes at
-	// the certificate chain
-	if elapsedToRotateCA > 0 {
-		err := m.verifyTLS()
-		if err != nil {
-			reqLogger.Info(fmt.Sprintf("TLS certificate chain failed verification, forcing rotation, err: %v", err))
-			// Force rotation
-			elapsedToRotateCA = 0
-		}
-	}
-
-	// We have pass expiration time for the CA
-	if elapsedToRotateCA <= 0 {
-
-		// If rotate fails runtime-controller manager will re-enqueue it, so
-		// it will be retried
-		err := m.rotateAll()
-		if err != nil {
-			return reconcile.Result{}, errors.Wrap(err, "failed rotating all certs")
-		}
-
-		// Re-calculate elapsedToRotate since we have generated new
-		// certificates
-		m.nextRotationDeadlineForCA()
-		elapsedToRotateCA = m.elapsedToRotateCAFromLastDeadline()
-
-		// Also recalculate it for serices certificate since they has changed
-		m.nextRotationDeadlineForServices()
-		elapsedToRotateServices = m.elapsedToRotateServicesFromLastDeadline()
-
-	} else if elapsedToRotateServices <= 0 {
-		// CA is ok but expiration but we have passed expiration time for service certificates
-		err := m.rotateServicesWithOverlap()
-		if err != nil {
-			return reconcile.Result{}, errors.Wrap(err, "failed rotating services certs")
-		}
-
-		// Re-calculate elapsedToRotateServices since we have generated new
-		// services certificates
-		m.nextRotationDeadlineForServices()
-		elapsedToRotateServices = m.elapsedToRotateServicesFromLastDeadline()
-	}
-
-	elapsedForCABundleCleanup, err := m.earliestElapsedForCACertsCleanup()
+	requeueAfter, err := m.reconcileCertificates()
 	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "failed getting ca bundle cleanup deadline")
+		logger.Error(err, "Reconcile failed, inmediate requeue")
+		return reconcile.Result{}, err
 	}
 
-	// We have pass cleanup deadline let's do the cleanup
-	if elapsedForCABundleCleanup <= 0 {
-		err = m.cleanUpCABundle()
-		if err != nil {
-			return reconcile.Result{}, errors.Wrap(err, "failed cleaning up CABundle")
-		}
-
-		// Re-calculate cleanup deadline since we may have to remove some certs there
-		elapsedForCABundleCleanup, err = m.earliestElapsedForCACertsCleanup()
-		if err != nil {
-			return reconcile.Result{}, errors.Wrap(err, "failed re-calculating ca bundle cleanup deadline")
-		}
-	}
-
-	elapsedForServiceCertsCleanup, err := m.earliestElapsedForServiceCertsCleanup()
-	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "failed getting service certs cleanup deadline")
-	}
-
-	// We have pass cleanup deadline let's do the cleanup
-	if elapsedForServiceCertsCleanup <= 0 {
-		err = m.cleanUpServiceCerts()
-		if err != nil {
-			return reconcile.Result{}, errors.Wrap(err, "failed cleaning up service certs")
-		}
-
-		// Re-calculate cleanup deadline since we may have to remove some certs there
-		elapsedForServiceCertsCleanup, err = m.earliestElapsedForServiceCertsCleanup()
-		if err != nil {
-			return reconcile.Result{}, errors.Wrap(err, "failed re-calculating service certs cleanup deadline")
-		}
-	}
-
-	// Return the event that is going to happend sonner all services certificates rotation,
-	// services certificate rotation or ca bundle cleanup
-	m.log.Info("Calculating RequeueAfter", "elapsedToRotateCA", elapsedToRotateCA, "elapsedToRotateServices", elapsedToRotateServices, "elapsedForCABundleCleanup", elapsedForCABundleCleanup, "elapsedForServiceCertsCleanup", elapsedForServiceCertsCleanup)
-	requeueAfter := min(elapsedToRotateCA, elapsedToRotateServices, elapsedForCABundleCleanup, elapsedForServiceCertsCleanup)
-
-	m.log.Info(fmt.Sprintf("Certificates will be Reconcile on %s", m.now().Add(requeueAfter)))
-	return reconcile.Result{RequeueAfter: requeueAfter}, nil
-}
-
-func min(values ...time.Duration) time.Duration {
-	m := time.Duration(0)
-	for i, e := range values {
-		if i == 0 || e < m {
-			m = e
-		}
-	}
-	return m
+	logger.Info("Reconcile done, requeuing", "RequeueAfter", requeueAfter)
+	return reconcile.Result{Requeue: true, RequeueAfter: requeueAfter}, nil
 }

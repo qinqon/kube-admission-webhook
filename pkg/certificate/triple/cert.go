@@ -149,7 +149,7 @@ func ipsToStrings(ips []net.IP) []string {
 }
 
 func VerifyTLS(certsPEM, keyPEM, caBundle []byte) error {
-	logger := logf.Log.WithName("kube-admission-webhook.VerifyTLS")
+	logger := logf.Log.WithName("VerifyTLS")
 
 	_, err := ParsePrivateKeyPEM(keyPEM)
 	if err != nil {

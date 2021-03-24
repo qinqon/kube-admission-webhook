@@ -48,18 +48,10 @@ func NewCA(name string, duration time.Duration) (*KeyPair, error) {
 	}, nil
 }
 
-func NewServerKeyPair(ca *KeyPair, commonName, svcName, svcNamespace, dnsDomain string, ips, hostnames []string, duration time.Duration) (*KeyPair, error) {
+func NewServerKeyPair(ca *KeyPair, commonName string, ips, hostnames []string, duration time.Duration) (*KeyPair, error) {
 	key, err := NewPrivateKey()
 	if err != nil {
 		return nil, fmt.Errorf("unable to create a server private key: %v", err)
-	}
-
-	namespacedName := fmt.Sprintf("%s.%s", svcName, svcNamespace)
-	internalAPIServerFQDN := []string{
-		svcName,
-		namespacedName,
-		fmt.Sprintf("%s.svc", namespacedName),
-		fmt.Sprintf("%s.svc.%s", namespacedName, dnsDomain),
 	}
 
 	altNames := AltNames{}
@@ -70,7 +62,6 @@ func NewServerKeyPair(ca *KeyPair, commonName, svcName, svcNamespace, dnsDomain 
 		}
 	}
 	altNames.DNSNames = append(altNames.DNSNames, hostnames...)
-	altNames.DNSNames = append(altNames.DNSNames, internalAPIServerFQDN...)
 
 	config := Config{
 		CommonName: commonName,

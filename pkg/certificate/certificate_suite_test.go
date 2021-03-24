@@ -28,13 +28,13 @@ var (
 
 	expectedNamespace = corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "foowebhook",
+			Name: "foowebhook-namespace",
 		},
 	}
 
 	expectedService = corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "foowebhook",
+			Namespace: expectedNamespace.Name,
 			Name:      "foowebhook-service",
 		},
 		Spec: corev1.ServiceSpec{

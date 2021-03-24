@@ -1,4 +1,4 @@
-package certificate
+package chain
 
 import (
 	"crypto/x509"
@@ -31,89 +31,6 @@ var _ = Describe("Cleanup", func() {
 		return certificates
 	}
 
-	type earliestCleanupDeadlineCase struct {
-		certsExpiration []certificateExpiration
-		expectedElapsed time.Duration
-	}
-	DescribeTable("earliestCleanupDeadline",
-		func(c earliestCleanupDeadlineCase) {
-
-			m := Manager{
-				now: func() time.Time { return now },
-				log: log,
-			}
-
-			certificates := expirationsToCertificates(c.certsExpiration)
-
-			obtainedDeadline := m.earliestCleanupDeadlineForCerts(certificates)
-			obtainedElapsed := obtainedDeadline.Sub(now)
-			Expect(obtainedElapsed).To(Equal(c.expectedElapsed))
-		},
-		Entry("empty certificates, deadline is now", earliestCleanupDeadlineCase{
-			certsExpiration: []certificateExpiration{},
-			expectedElapsed: time.Duration(0),
-		}),
-		Entry("one certificate, deadline is certificate's expiration time", earliestCleanupDeadlineCase{
-			certsExpiration: []certificateExpiration{
-				{
-					notBefore: -1 * time.Hour,
-					notAfter:  99 * time.Hour,
-				},
-			},
-			expectedElapsed: 99 * time.Hour,
-		}),
-		Entry("first one sooner, deadline taken from it", earliestCleanupDeadlineCase{
-			certsExpiration: []certificateExpiration{
-				{
-					notBefore: -3 * time.Hour,
-					notAfter:  88 * time.Hour,
-				},
-				{
-					notBefore: -2 * time.Hour,
-					notAfter:  99 * time.Hour,
-				},
-				{
-					notBefore: -1 * time.Hour,
-					notAfter:  101 * time.Hour,
-				},
-			},
-			expectedElapsed: 88 * time.Hour,
-		}),
-		Entry("second one sooner, deadline taken from it", earliestCleanupDeadlineCase{
-			certsExpiration: []certificateExpiration{
-				{
-					notBefore: -3 * time.Hour,
-					notAfter:  88 * time.Hour,
-				},
-				{
-					notBefore: -4 * time.Hour,
-					notAfter:  77 * time.Hour,
-				},
-				{
-					notBefore: -1 * time.Hour,
-					notAfter:  101 * time.Hour,
-				},
-			},
-			expectedElapsed: 77 * time.Hour,
-		}),
-		Entry("third one sooner, deadline taken from it", earliestCleanupDeadlineCase{
-			certsExpiration: []certificateExpiration{
-				{
-					notBefore: 0 * time.Hour,
-					notAfter:  99 * time.Hour,
-				},
-				{
-					notBefore: -1 * time.Hour,
-					notAfter:  77 * time.Hour,
-				},
-				{
-					notBefore: -2 * time.Hour,
-					notAfter:  66 * time.Hour,
-				},
-			},
-			expectedElapsed: 66 * time.Hour,
-		}),
-	)
 	type cleanUpCertificatesCase struct {
 		certsExpiration         []certificateExpiration
 		expectedCertsExpiration []certificateExpiration
@@ -121,13 +38,13 @@ var _ = Describe("Cleanup", func() {
 	DescribeTable("cleanUpCertificates",
 		func(c cleanUpCertificatesCase) {
 
-			m := Manager{
+			r := certificateChain{
 				now: func() time.Time { return now },
 				log: log,
 			}
 
 			certificates := expirationsToCertificates(c.certsExpiration)
-			cleanedUpCertificates := m.cleanUpCertificates(certificates)
+			cleanedUpCertificates := r.cleanUpCertificateList(certificates)
 			expectedCertificates := expirationsToCertificates(c.expectedCertsExpiration)
 			Expect(cleanedUpCertificates).To(Equal(expectedCertificates), "should have cleaned up certificates")
 
