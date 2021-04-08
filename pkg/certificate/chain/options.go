@@ -10,16 +10,16 @@ const (
 )
 
 func (o *Options) validate() error {
-	if o.CAOverlapInterval > o.CARotateInterval {
-		return fmt.Errorf("failed validating certificate options, 'CAOverlapInterval' has to be <= 'CARotateInterval'")
+	if o.CAOverlapInterval >= o.CARotateInterval {
+		return fmt.Errorf("failed validating certificate options, 'CAOverlapInterval' has to be < 'CARotateInterval'")
 	}
 
 	if o.CertRotateInterval > o.CARotateInterval {
 		return fmt.Errorf("failed validating certificate options, 'CertRotateInterval' has to be <= 'CARotateInterval'")
 	}
 
-	if o.CertOverlapInterval > o.CertRotateInterval {
-		return fmt.Errorf("failed validating certificate options, 'CertOverlapInterval' has to be <= 'CertRotateInterval'")
+	if o.CertOverlapInterval >= o.CertRotateInterval {
+		return fmt.Errorf("failed validating certificate options, 'CertOverlapInterval' has to be < 'CertRotateInterval'")
 	}
 
 	return nil
@@ -34,7 +34,7 @@ func (o Options) withDefaults() Options {
 	}
 
 	if o.CAOverlapInterval == 0 {
-		withDefaultsOptions.CAOverlapInterval = withDefaultsOptions.CARotateInterval
+		withDefaultsOptions.CAOverlapInterval = withDefaultsOptions.CARotateInterval / 3
 	}
 
 	if o.CertRotateInterval == 0 {
@@ -42,7 +42,7 @@ func (o Options) withDefaults() Options {
 	}
 
 	if o.CertOverlapInterval == 0 {
-		withDefaultsOptions.CertOverlapInterval = withDefaultsOptions.CertRotateInterval
+		withDefaultsOptions.CertOverlapInterval = withDefaultsOptions.CertRotateInterval / 3
 	}
 	return withDefaultsOptions
 }
