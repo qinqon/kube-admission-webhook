@@ -2,6 +2,7 @@ package certificate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/qinqon/kube-admission-webhook/pkg/certificate/chain"
 	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
 )
 
@@ -31,9 +33,28 @@ var _ = Describe("Certificates controller", func() {
 		serviceOverlapDuration  = serviceCertDuration / 10
 		mgr                     *Manager
 		now                     time.Time
+		t0                      time.Time
 		isTLSEventuallyVerified = func() AsyncAssertion {
 			return Eventually(func() error {
-				return mgr.verifyTLS()
+				secret, err := getSecret()
+				if err != nil {
+					return err
+				}
+				if secret.Data == nil {
+					return errors.New("Service secret has no Data")
+				}
+				key, ok := secret.Data[corev1.TLSPrivateKeyKey]
+				if !ok {
+					return errors.New("Service secret has no key")
+				}
+				cert, ok := secret.Data[corev1.TLSCertKey]
+				if !ok {
+					return errors.New("Service secret has no cert")
+				}
+
+				webhook := getWebhookConfiguration()
+
+				return triple.VerifyTLS(cert, key, webhook.Webhooks[0].ClientConfig.CABundle)
 			}, 20*time.Second, 1*time.Second)
 		}
 
@@ -69,18 +90,27 @@ var _ = Describe("Certificates controller", func() {
 	BeforeEach(func() {
 
 		var err error
-		mgr, err = NewManager(cli, Options{
-			WebhookName:         expectedMutatingWebhookConfiguration.Name,
-			WebhookType:         MutatingWebhook,
-			Namespace:           expectedNamespace.Name,
-			CARotateInterval:    caCertDuration,
-			CAOverlapInterval:   caOverlapDuration,
-			CertRotateInterval:  serviceCertDuration,
-			CertOverlapInterval: serviceOverlapDuration,
-		})
+		mgr, err = NewManager(
+			expectedMutatingWebhookConfiguration.Name,
+			expectedNamespace.Name,
+			cli,
+			chain.Options{
+				CARotateInterval:    caCertDuration,
+				CAOverlapInterval:   caOverlapDuration,
+				CertRotateInterval:  serviceCertDuration,
+				CertOverlapInterval: serviceOverlapDuration,
+			},
+			[]WebhookReference{
+				{
+					Type: MutatingWebhook,
+					Name: expectedMutatingWebhookConfiguration.Name,
+				},
+			},
+		)
 		Expect(err).To(Succeed(), "should succeed constructing certificate manager")
-		// Freeze time
-		now = time.Now()
+		// Freeze time, to the most recent second in UTC for easier reading
+		now = time.Now().Truncate(time.Second).UTC()
+		t0 = now
 
 		createResources()
 	})
@@ -94,21 +124,17 @@ var _ = Describe("Certificates controller", func() {
 	}
 
 	getTLS := func() TLS {
-		obtainedWebhookConfiguration := admissionregistrationv1.MutatingWebhookConfiguration{}
-		err := cli.Get(context.TODO(), types.NamespacedName{Name: "foowebhook"}, &obtainedWebhookConfiguration)
-		Expect(err).To(Succeed(), "should success getting mutatingwebhookconfiguration")
+		obtainedWebhookConfiguration := getWebhookConfiguration()
 
 		cliConfig := obtainedWebhookConfiguration.Webhooks[0].ClientConfig
 		Expect(cliConfig.CABundle).ToNot(BeEmpty(), "should update CA budle")
 
-		obtainedCASecret := corev1.Secret{}
-		err = cli.Get(context.TODO(), types.NamespacedName{Name: expectedCASecret.Name, Namespace: expectedCASecret.Namespace}, &obtainedCASecret)
+		obtainedCASecret, err := getCASecret()
 		Expect(err).ToNot(HaveOccurred(), "should success getting CA secret")
 		Expect(obtainedCASecret.Type).To(Equal(corev1.SecretTypeOpaque), "should be a CA secret")
 		Expect(obtainedCASecret.Data).ToNot(BeEmpty(), "should contain a secret with CA key/cert")
 
-		obtainedSecret := corev1.Secret{}
-		err = cli.Get(context.TODO(), types.NamespacedName{Name: expectedSecret.Name, Namespace: expectedSecret.Namespace}, &obtainedSecret)
+		obtainedSecret, err := getSecret()
 		Expect(err).ToNot(HaveOccurred(), "should success getting TLS secret")
 		Expect(obtainedSecret.Type).To(Equal(corev1.SecretTypeTLS), "should be a TLS secret")
 		Expect(obtainedSecret.Data).ToNot(BeEmpty(), "should contain a secret with TLS key/cert")
@@ -125,14 +151,12 @@ var _ = Describe("Certificates controller", func() {
 	}
 	Context("when reconcile is called for the first time", func() {
 		var (
-			previousResult, currentResult reconcile.Result
-			previousTLS, currentTLS       TLS
-			backToTheFuture               = func(step string, future time.Duration) {
+			currentResult           reconcile.Result
+			previousTLS, currentTLS TLS
+			backToTheFuture         = func(step string, future time.Duration) {
 				previousTLS = currentTLS
-				previousResult = currentResult
-				now = mgr.now().Add(future)
-				mgr.now = func() time.Time { return now }
-				triple.Now = mgr.now
+				now = now.Add(future)
+				triple.Now = func() time.Time { return now }
 				var err error
 				By(fmt.Sprintf("%s t: %s", step, future))
 				currentResult, err = mgr.Reconcile(context.Background(), reconcile.Request{})
@@ -145,18 +169,18 @@ var _ = Describe("Certificates controller", func() {
 		})
 
 		It("should create TLS cert/key with proper annotation and return proper deadline", func() {
-			Expect(currentTLS.caSecretAnnotations).To(HaveKey(secretManagedAnnotatoinKey), "should be marked as managed by the kube-admission-webhook cert-manager")
-			Expect(currentTLS.serviceSecretAnnotations).To(HaveKey(secretManagedAnnotatoinKey), "should be marked as managed by the kube-admission-webhook cert-manager")
-			Expect(currentResult.RequeueAfter).To(BeNumerically(">", time.Duration(0)), "should not be zero")
-			Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after first Reconcile to rotate service cert")
+			Expect(currentTLS.caSecretAnnotations).To(HaveKey(secretManagedAnnotationKey), "should be marked as managed by the kube-admission-webhook cert-manager")
+			Expect(currentTLS.serviceSecretAnnotations).To(HaveKey(secretManagedAnnotationKey), "should be marked as managed by the kube-admission-webhook cert-manager")
+			durationToFirstRotation := t0.Add(serviceCertDuration - serviceOverlapDuration).Sub(now)
+			Expect(currentResult.RequeueAfter).To(Equal(durationToFirstRotation), "should schedule new Reconcile after first Reconcile to rotate service cert")
 		})
 		Context("and then called in the middle of service cert deadline", func() {
 			BeforeEach(func() {
 				backToTheFuture("Reconcile in the middle of service cert deadline", serviceCertDuration/2)
 			})
 			It("should not rotate service cert and return a reduced deadline", func() {
-				Expect(currentResult.RequeueAfter).To(BeNumerically("<", previousResult.RequeueAfter), "should subsctract 'now' from service cert deadline at reconcile in the middle of service certificate duration")
-				Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile rotate service cert")
+				durationToFirstRotation := t0.Add(serviceCertDuration - serviceOverlapDuration).Sub(now)
+				Expect(currentResult.RequeueAfter).To(Equal(durationToFirstRotation), "should schedule new Reconcile rotate service cert")
 				Expect(currentTLS).To(Equal(previousTLS), "should not change TLS cert/key on reconcile in the middle of certificate duration")
 			})
 
@@ -172,9 +196,8 @@ var _ = Describe("Certificates controller", func() {
 					Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 					Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
 					Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
-					earliestElapsedForServiceCertsCleanup, err := mgr.earliestElapsedForServiceCertsCleanup()
-					Expect(err).ToNot(HaveOccurred())
-					Expect(currentResult.RequeueAfter).To(Equal(earliestElapsedForServiceCertsCleanup), "should schedule new Reconcile after service cert rotation to cleanup overlap")
+					durationToFirstCleanup := t0.Add(serviceCertDuration).Sub(now)
+					Expect(currentResult.RequeueAfter).To(Equal(durationToFirstCleanup), "should schedule new Reconcile after service cert rotation to cleanup overlap")
 
 					certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
 					Expect(err).To(Succeed(), "should succeed parsing service certificates")
@@ -192,7 +215,8 @@ var _ = Describe("Certificates controller", func() {
 						Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 						Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
 						Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
-						Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after service cert rotation to rotate service cert again")
+						durationToSecondRotation := t0.Add(2 * (serviceCertDuration - serviceOverlapDuration)).Sub(now)
+						Expect(currentResult.RequeueAfter).To(Equal(durationToSecondRotation), "should schedule new Reconcile after service cert rotation to rotate service cert again")
 
 						certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
 						Expect(err).To(Succeed(), "should succeed parsing service certificates")
@@ -211,9 +235,8 @@ var _ = Describe("Certificates controller", func() {
 							Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 							Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
 							Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
-							earliestElapsedForServiceCertsCleanup, err := mgr.earliestElapsedForServiceCertsCleanup()
-							Expect(err).ToNot(HaveOccurred())
-							Expect(currentResult.RequeueAfter).To(Equal(earliestElapsedForServiceCertsCleanup), "should schedule new Reconcile after service cert rotation to cleanup overlap")
+							durationToSecondCleanup := t0.Add(2*serviceCertDuration - serviceOverlapDuration).Sub(now)
+							Expect(currentResult.RequeueAfter).To(Equal(durationToSecondCleanup), "should schedule new Reconcile after service cert rotation to cleanup overlap")
 
 							certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
 							Expect(err).To(Succeed(), "should succeed parsing service certificates")
@@ -231,7 +254,8 @@ var _ = Describe("Certificates controller", func() {
 								Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 								Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
 								Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
-								Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateCAFromLastDeadline()), "should schedule new Reconcile after service cert rotation to rotate CA cert")
+								durationToFirstCARotation := t0.Add(caCertDuration - caOverlapDuration).Sub(now)
+								Expect(currentResult.RequeueAfter).To(Equal(durationToFirstCARotation), "should schedule new Reconcile after service cert rotation to rotate CA cert")
 
 								certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
 								Expect(err).To(Succeed(), "should succeed parsing service certificates")
@@ -248,10 +272,8 @@ var _ = Describe("Certificates controller", func() {
 									Expect(currentTLS.caBundle).ToNot(Equal(previousTLS.caBundle), "should have rotate CABundle ")
 									Expect(currentTLS.caCertificate).ToNot(Equal(previousTLS.caCertificate), "should have rotate CA certificate")
 									Expect(currentTLS.caPrivateKey).ToNot(Equal(previousTLS.caPrivateKey), "should have rotate CA key rotation")
-
-									elapsedForCleanup, err := mgr.earliestElapsedForCACertsCleanup()
-									Expect(err).To(Succeed(), "should succeed calculating earliestElapsedForCACertsCleanup")
-									Expect(currentResult.RequeueAfter).To(Equal(elapsedForCleanup), "Reconcile at rotate should schedule next Reconcile to do the CA overlapping cleanup")
+									durationToFirstCACleanup := t0.Add(caCertDuration).Sub(now)
+									Expect(currentResult.RequeueAfter).To(Equal(durationToFirstCACleanup), "Reconcile at rotate should schedule next Reconcile to do the CA overlapping cleanup")
 
 									cas, err := triple.ParseCertsPEM(currentTLS.caBundle)
 									Expect(err).To(Succeed(), "should succeed parssing caBundle")
@@ -272,7 +294,8 @@ var _ = Describe("Certificates controller", func() {
 										cas, err := triple.ParseCertsPEM(currentTLS.caBundle)
 										Expect(err).To(Succeed(), "should succeed parssing caBundle")
 										Expect(cas).To(HaveLen(1), "should have cleandup CA bundle with expired certificates gone")
-										Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after CA cleanup to rotate service cert")
+										durationToThirdRotation := t0.Add(caCertDuration - caOverlapDuration + serviceCertDuration - serviceOverlapDuration).Sub(now)
+										Expect(currentResult.RequeueAfter).To(Equal(durationToThirdRotation), "should schedule new Reconcile after CA cleanup to rotate service cert")
 									})
 								})
 							})
@@ -356,11 +379,16 @@ var _ = Describe("Certificates controller", func() {
 	})
 })
 
-func getSecret() corev1.Secret {
+func getCASecret() (corev1.Secret, error) {
+	obtainedSecret := corev1.Secret{}
+	err := cli.Get(context.TODO(), types.NamespacedName{Namespace: expectedCASecret.Namespace, Name: expectedCASecret.Name}, &obtainedSecret)
+	return obtainedSecret, err
+}
+
+func getSecret() (corev1.Secret, error) {
 	obtainedSecret := corev1.Secret{}
 	err := cli.Get(context.TODO(), types.NamespacedName{Namespace: expectedSecret.Namespace, Name: expectedSecret.Name}, &obtainedSecret)
-	Expect(err).To(Succeed(), "should succeed getting TLS secret")
-	return obtainedSecret
+	return obtainedSecret, err
 }
 
 func getWebhookConfiguration() admissionregistrationv1.MutatingWebhookConfiguration {

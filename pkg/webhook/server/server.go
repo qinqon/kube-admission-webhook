@@ -2,15 +2,11 @@ package server
 
 import (
 	"context"
-	"io/ioutil"
-	"os"
-	"path"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 
-	corev1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,65 +17,77 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/qinqon/kube-admission-webhook/pkg/certificate"
-	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
+	"github.com/qinqon/kube-admission-webhook/pkg/certificate/chain"
 )
 
 type Server struct {
-	webhookServer *webhook.Server
-	certManager   *certificate.Manager
-	log           logr.Logger
+	webhookServer  *webhook.Server
+	webhookConfigs []certificate.WebhookReference
+	newCertManager func() (*certificate.Manager, error)
+	certManager    *certificate.Manager
+	log            logr.Logger
 }
 
-type ServerModifier func(w *webhook.Server)
+type ServerModifier func(s *Server)
 
 // Add creates a new Conditions Mutating Webhook and adds it to the Manager. The Manager will set fields on the Webhook
 // and Start it when the Manager is Started.
-func New(client client.Client, certificateOpts certificate.Options, serverOpts ...ServerModifier) (*Server, error) {
-	certManager, err := certificate.NewManager(client, certificateOpts)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed constructing certificate manager")
-	}
-
+func New(name, namespace string, client client.Client, options chain.Options, serverOpts ...ServerModifier) (*Server, error) {
 	s := &Server{
 		webhookServer: &webhook.Server{
 			Port:    8443,
 			CertDir: "/etc/webhook/certs/",
 		},
-		certManager: certManager,
-		log:         logf.Log.WithName("webhook/server"),
+		webhookConfigs: []certificate.WebhookReference{},
+		log:            logf.Log.WithName("webhook/server"),
 	}
 	s.UpdateOpts(serverOpts...)
 	s.webhookServer.Register("/readyz", healthz.CheckHandler{Checker: healthz.Ping})
+	s.newCertManager = func() (*certificate.Manager, error) {
+		return certificate.NewManager(name, namespace, client, options, s.webhookConfigs)
+	}
+
 	return s, nil
 }
 
 func WithHook(path string, hook *webhook.Admission) ServerModifier {
-	return func(s *webhook.Server) {
-		s.Register(path, hook)
+	return func(s *Server) {
+		s.webhookServer.Register(path, hook)
 	}
 }
 
 func WithPort(port int) ServerModifier {
-	return func(s *webhook.Server) {
-		s.Port = port
+	return func(s *Server) {
+		s.webhookServer.Port = port
 	}
 }
 
 func WithCertDir(certDir string) ServerModifier {
-	return func(s *webhook.Server) {
-		s.CertDir = certDir
+	return func(s *Server) {
+		s.webhookServer.CertDir = certDir
+	}
+}
+
+func WithConfig(webhookConfig certificate.WebhookReference) ServerModifier {
+	return func(s *Server) {
+		s.webhookConfigs = append(s.webhookConfigs, webhookConfig)
 	}
 }
 
 //updates Server parameters using ServerModifier functions. Once the manager is started these parameters cannot be updated
 func (s *Server) UpdateOpts(serverOpts ...ServerModifier) {
 	for _, serverOpt := range serverOpts {
-		serverOpt(s.webhookServer)
+		serverOpt(s)
 	}
 }
 
 func (s *Server) Add(mgr manager.Manager) error {
-	err := s.certManager.Add(mgr)
+	var err error
+	s.certManager, err = s.newCertManager()
+	if err != nil {
+		return errors.Wrap(err, "failed constructing certificate manager")
+	}
+	err = s.certManager.Add(mgr)
 	if err != nil {
 		return errors.Wrap(err, "failed adding certificate manager to controller-runtime manager")
 	}
@@ -91,40 +99,11 @@ func (s *Server) Add(mgr manager.Manager) error {
 }
 
 func (s *Server) checkTLS() error {
-
-	keyPath := path.Join(s.webhookServer.CertDir, corev1.TLSPrivateKeyKey)
-	_, err := os.Stat(keyPath)
-	if err != nil {
-		return errors.Wrap(err, "failed checking TLS key file stats")
+	if s.certManager == nil {
+		return errors.New("No manager has been added yet")
 	}
 
-	certsPath := path.Join(s.webhookServer.CertDir, corev1.TLSCertKey)
-	_, err = os.Stat(certsPath)
-	if err != nil {
-		return errors.Wrap(err, "failed checking TLS cert file stats")
-	}
-
-	key, err := ioutil.ReadFile(path.Join(s.webhookServer.CertDir, corev1.TLSPrivateKeyKey))
-	if err != nil {
-		return errors.Wrap(err, "failed reading for TLS key")
-	}
-
-	certPEM, err := ioutil.ReadFile(path.Join(s.webhookServer.CertDir, corev1.TLSCertKey))
-	if err != nil {
-		return errors.Wrap(err, "failed reading for TLS cert")
-	}
-
-	caPEM, err := s.certManager.CABundle()
-	if err != nil {
-		return errors.Wrap(err, "failed to retrieve CA cert")
-	}
-
-	err = triple.VerifyTLS(certPEM, key, caPEM)
-	if err != nil {
-		return errors.Wrapf(err, "failed verifying %s/%s", certsPath, keyPath)
-	}
-
-	return nil
+	return s.certManager.VerifyTLS()
 }
 
 func (s *Server) waitForTLSReadiness() error {

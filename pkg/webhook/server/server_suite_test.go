@@ -15,6 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 var (
@@ -26,14 +28,22 @@ var (
 
 	expectedNamespace = corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "foowebhook",
+			Name: "foowebhook-namespace",
 		},
 	}
 	selectedScope = admissionregistrationv1.NamespacedScope
 	servicePath   = "/mutatepod"
-	failurePolicy = admissionregistrationv1.Fail
+	failPolicy    = admissionregistrationv1.Fail
+	ignorePolicy  = admissionregistrationv1.Ignore
 	sideEffects   = admissionregistrationv1.SideEffectClassNone
 	mutatepodURL  = "https://localhost:8443/mutatepod"
+
+	expectedSecret = corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: expectedNamespace.Name,
+			Name:      "localhost",
+		},
+	}
 
 	expectedMutatingWebhookConfiguration = admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
@@ -45,7 +55,32 @@ var (
 				ClientConfig: admissionregistrationv1.WebhookClientConfig{
 					URL: &mutatepodURL,
 				},
-				FailurePolicy:           &failurePolicy,
+				FailurePolicy:           &failPolicy,
+				SideEffects:             &sideEffects,
+				AdmissionReviewVersions: []string{"v1"},
+				Rules: []admissionregistrationv1.RuleWithOperations{
+					{
+						Rule: admissionregistrationv1.Rule{
+							APIGroups:   []string{""},
+							APIVersions: []string{"v1"},
+							Resources:   []string{"pods"},
+							Scope:       &selectedScope,
+						},
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Create,
+						},
+					},
+				},
+			},
+			{
+				Name: "dummy.qinqon.io",
+				ClientConfig: admissionregistrationv1.WebhookClientConfig{
+					Service: &admissionregistrationv1.ServiceReference{
+						Name:      expectedSecret.Name,
+						Namespace: expectedSecret.Namespace,
+					},
+				},
+				FailurePolicy:           &ignorePolicy,
 				SideEffects:             &sideEffects,
 				AdmissionReviewVersions: []string{"v1"},
 				Rules: []admissionregistrationv1.RuleWithOperations{
@@ -64,13 +99,6 @@ var (
 			},
 		},
 	}
-
-	expectedSecret = corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: expectedNamespace.Name,
-			Name:      "foowebhook",
-		},
-	}
 )
 
 func createResources() {
@@ -85,6 +113,8 @@ func deleteResources() {
 }
 
 var _ = BeforeSuite(func() {
+	logf.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(GinkgoWriter)))
+
 	testEnv = &envtest.Environment{
 		UseExistingCluster: &useCluster,
 	}

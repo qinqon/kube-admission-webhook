@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	certificate "github.com/qinqon/kube-admission-webhook/pkg/certificate"
+	"github.com/qinqon/kube-admission-webhook/pkg/certificate/chain"
 )
 
 var _ = Describe("Webhook server", func() {
@@ -51,17 +52,6 @@ var _ = Describe("Webhook server", func() {
 			freePort, err := freeport.GetFreePort()
 			Expect(err).To(Succeed(), "should succeed selectiong a free port")
 
-			freeportURL := strings.ReplaceAll(mutatepodURL, "8443", strconv.Itoa(freePort))
-			obtainedMutatingWebhookConfiguration := admissionregistrationv1.MutatingWebhookConfiguration{}
-
-			err = cli.Get(context.TODO(), types.NamespacedName{Name: expectedMutatingWebhookConfiguration.Name}, &obtainedMutatingWebhookConfiguration)
-			Expect(err).To(Succeed(), "should succeed getting mutatingwebhookconfiguration")
-
-			obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.URL = &freeportURL
-
-			err = cli.Update(context.TODO(), &obtainedMutatingWebhookConfiguration)
-			Expect(err).To(Succeed(), "should succeed updating mutating webhook with freeport URL")
-
 			mutatedPodHandler := func(ctx context.Context, req admission.Request) admission.Response {
 				pod := &corev1.Pod{}
 
@@ -84,12 +74,21 @@ var _ = Describe("Webhook server", func() {
 				return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 			}
 
-			server, err := New(cli, certificate.Options{WebhookName: expectedMutatingWebhookConfiguration.Name, WebhookType: certificate.MutatingWebhook, Namespace: expectedNamespace.Name, CARotateInterval: certificate.OneYearDuration, CertRotateInterval: certificate.OneYearDuration},
+			server, err := New(
+				expectedMutatingWebhookConfiguration.Name,
+				expectedNamespace.Name,
+				cli,
+				chain.Options{CARotateInterval: chain.OneYearDuration, CertRotateInterval: chain.OneYearDuration},
 				WithCertDir(certDir),
 				WithPort(freePort),
 				WithHook("/mutatepod",
 					&admission.Webhook{
 						Handler: admission.HandlerFunc(mutatedPodHandler),
+					}),
+				WithConfig(
+					certificate.WebhookReference{
+						Type: certificate.MutatingWebhook,
+						Name: expectedMutatingWebhookConfiguration.Name,
 					}),
 			)
 
@@ -132,6 +131,19 @@ var _ = Describe("Webhook server", func() {
 
 			err = ioutil.WriteFile(filepath.Join(certDir, corev1.TLSPrivateKeyKey), obtainedSecret.Data[corev1.TLSPrivateKeyKey], 0500)
 			Expect(err).To(Succeed(), "should success dumping TLS server key")
+
+			By("Updating mutating webhook with freeport URL & CA bundle")
+			freeportURL := strings.ReplaceAll(mutatepodURL, "8443", strconv.Itoa(freePort))
+			obtainedMutatingWebhookConfiguration := admissionregistrationv1.MutatingWebhookConfiguration{}
+
+			err = cli.Get(context.TODO(), types.NamespacedName{Name: expectedMutatingWebhookConfiguration.Name}, &obtainedMutatingWebhookConfiguration)
+			Expect(err).To(Succeed(), "should succeed getting mutatingwebhookconfiguration")
+
+			obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.URL = &freeportURL
+			obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = obtainedMutatingWebhookConfiguration.Webhooks[1].ClientConfig.CABundle
+
+			err = cli.Update(context.TODO(), &obtainedMutatingWebhookConfiguration)
+			Expect(err).To(Succeed(), "should succeed updating mutating webhook with freeport URL")
 
 			close(done)
 		}, 10)

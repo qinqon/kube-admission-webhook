@@ -19,10 +19,10 @@ func (m *Manager) get(key types.NamespacedName, value client.Object) error {
 		err := m.client.Get(context.TODO(), key, value)
 		if err != nil {
 			if _, cacheNotStarted := err.(*cache.ErrCacheNotStarted); cacheNotStarted {
+				m.log.Error(err, "Retrying...")
 				return false, nil
-			} else {
-				return true, err
 			}
+			return true, err
 		}
 		return true, nil
 	})
