@@ -254,7 +254,7 @@ var _ = Describe("certificate manager", func() {
 
 				obtainedMutatingWebhookConfiguration := loadMutatingWebhook(m)
 				caBundle := obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle
-				hackedCABundle := append(caBundle, triple.EncodeCertPEM(hackedCA.Cert)...)
+				hackedCABundle := append(triple.EncodeCertPEM(hackedCA.Cert), caBundle...)
 				obtainedMutatingWebhookConfiguration.Webhooks[0].ClientConfig.CABundle = hackedCABundle
 				updateMutatingWebhook(m, &obtainedMutatingWebhookConfiguration)
 			},
