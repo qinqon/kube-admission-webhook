@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
+	"github.com/qinqon/kube-admission-webhook/version"
 )
 
 var (
@@ -145,8 +146,8 @@ var _ = Describe("Certificates controller", func() {
 		})
 
 		It("should create TLS cert/key with proper annotation and return proper deadline", func() {
-			Expect(currentTLS.caSecretAnnotations).To(HaveKey(secretManagedAnnotatoinKey), "should be marked as managed by the kube-admission-webhook cert-manager")
-			Expect(currentTLS.serviceSecretAnnotations).To(HaveKey(secretManagedAnnotatoinKey), "should be marked as managed by the kube-admission-webhook cert-manager")
+			Expect(currentTLS.caSecretAnnotations).To(HaveKeyWithValue(secretManagedAnnotatoinKey, version.Version), "should be marked as managed by the kube-admission-webhook cert-manager")
+			Expect(currentTLS.serviceSecretAnnotations).To(HaveKeyWithValue(secretManagedAnnotatoinKey, version.Version), "should be marked as managed by the kube-admission-webhook cert-manager")
 			Expect(currentResult.RequeueAfter).To(BeNumerically(">", time.Duration(0)), "should not be zero")
 			Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after first Reconcile to rotate service cert")
 		})
@@ -281,6 +282,59 @@ var _ = Describe("Certificates controller", func() {
 				})
 
 			})
+		})
+	})
+	Context("when reconcile is called with obsolete certificate bundles", func() {
+		var (
+			previousTLS TLS
+		)
+		BeforeEach(func() {
+			By("Call reconcile to create the secrets")
+			_, err := mgr.Reconcile(context.Background(), reconcile.Request{})
+			Expect(err).To(Succeed(), "should success reconciling")
+
+			By("Mark secrets with obsolete label")
+			obtainedCASecret := corev1.Secret{}
+			err = cli.Get(context.TODO(), types.NamespacedName{Name: expectedCASecret.Name, Namespace: expectedCASecret.Namespace}, &obtainedCASecret)
+			Expect(err).ToNot(HaveOccurred(), "should success getting CA secret")
+			obtainedCASecret.Annotations = map[string]string{
+				secretManagedAnnotatoinKey: "",
+			}
+			err = cli.Update(context.TODO(), &obtainedCASecret)
+			Expect(err).ToNot(HaveOccurred(), "should success updating CA secret")
+
+			obtainedSecret := corev1.Secret{}
+			err = cli.Get(context.TODO(), types.NamespacedName{Name: expectedSecret.Name, Namespace: expectedSecret.Namespace}, &obtainedSecret)
+			Expect(err).ToNot(HaveOccurred(), "should success getting TLS secret")
+			obtainedCASecret.Annotations = map[string]string{
+				secretManagedAnnotatoinKey: "",
+			}
+			err = cli.Update(context.TODO(), &obtainedSecret)
+			Expect(err).ToNot(HaveOccurred(), "should success updating service secret")
+
+			By("Get the TLS data set before overwrite it")
+			previousTLS = getTLS()
+
+			By("Call reconcile again to trigger obsolete cert bundle logic")
+			_, err = mgr.Reconcile(context.Background(), reconcile.Request{})
+			Expect(err).To(Succeed(), "should reconciling again")
+		})
+
+		It("should create TLS cert/key with proper annotation and return proper deadline", func() {
+			currentTLS := getTLS()
+			Expect(currentTLS.caSecretAnnotations).To(HaveKeyWithValue(secretManagedAnnotatoinKey, version.Version), "should be marked as managed by the kube-admission-webhook cert-manager")
+			Expect(currentTLS.serviceSecretAnnotations).To(HaveKeyWithValue(secretManagedAnnotatoinKey, version.Version), "should be marked as managed by the kube-admission-webhook cert-manager")
+			Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should remove obsolete service cert")
+			Expect(currentTLS.servicePrivateKey).ToNot(Equal(previousTLS.servicePrivateKey), "should remove obsolete service key")
+			Expect(currentTLS.caCertificate).ToNot(Equal(previousTLS.caCertificate), "should remove obsolete CA cert")
+			Expect(currentTLS.caBundle).ToNot(Equal(previousTLS.caBundle), "should remove obsolete CAbundle")
+			Expect(currentTLS.caBundle).To(Equal(currentTLS.caCertificate), "should store CA certificate into CA bundle")
+			certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
+			Expect(err).To(Succeed(), "should succeed parsing service certificates")
+			Expect(certs).To(HaveLen(1), "should have just the new service cert")
+			certs, err = triple.ParseCertsPEM(currentTLS.caCertificate)
+			Expect(err).To(Succeed(), "should succeed parsing service certificates")
+			Expect(certs).To(HaveLen(1), "should have just the new CA cert")
 		})
 	})
 	Context("when integrated into a controller-runtime manager and started", func() {

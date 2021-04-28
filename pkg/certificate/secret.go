@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/util/retry"
 
 	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
+	"github.com/qinqon/kube-admission-webhook/version"
 )
 
 const (
@@ -23,16 +24,23 @@ const (
 	CAPrivateKeyKey            = "ca.key"
 )
 
-func populateCASecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
-	if secret.Annotations == nil {
-		secret.Annotations = map[string]string{}
+func populateSecret(privateKeyKey, certKey string, secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
+	setAnnotation(&secret)
+	privateKey := []byte{}
+	cert := []byte{}
+	if keyPair != nil {
+		privateKey = triple.EncodePrivateKeyPEM(keyPair.Key)
+		cert = triple.EncodeCertPEM(keyPair.Cert)
 	}
-	secret.Annotations[secretManagedAnnotatoinKey] = ""
 	secret.Data = map[string][]byte{
-		CACertKey:       triple.EncodeCertPEM(keyPair.Cert),
-		CAPrivateKeyKey: triple.EncodePrivateKeyPEM(keyPair.Key),
+		privateKeyKey: privateKey,
+		certKey:       cert,
 	}
 	return &secret, nil
+}
+
+func populateCASecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
+	return populateSecret(CAPrivateKeyKey, CACertKey, secret, keyPair)
 }
 
 func addTLSCertificate(data map[string][]byte, cert *x509.Certificate) error {
@@ -51,21 +59,8 @@ func addTLSCertificate(data map[string][]byte, cert *x509.Certificate) error {
 	return nil
 }
 
-func setAnnotation(secret *corev1.Secret) {
-	if secret.Annotations == nil {
-		secret.Annotations = map[string]string{}
-	}
-	secret.Annotations[secretManagedAnnotatoinKey] = ""
-}
-
 func resetTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
-	setAnnotation(&secret)
-
-	secret.Data = map[string][]byte{
-		corev1.TLSPrivateKeyKey: triple.EncodePrivateKeyPEM(keyPair.Key),
-		corev1.TLSCertKey:       triple.EncodeCertPEM(keyPair.Cert),
-	}
-	return &secret, nil
+	return populateSecret(corev1.TLSPrivateKeyKey, corev1.TLSCertKey, secret, keyPair)
 }
 
 func appendTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
@@ -83,6 +78,13 @@ func appendTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Sec
 	secret.Data[corev1.TLSPrivateKeyKey] = triple.EncodePrivateKeyPEM(keyPair.Key)
 
 	return &secret, nil
+}
+
+func setAnnotation(secret *corev1.Secret) {
+	if secret.Annotations == nil {
+		secret.Annotations = map[string]string{}
+	}
+	secret.Annotations[secretManagedAnnotatoinKey] = version.Version
 }
 
 func (m *Manager) resetAndApplyTLSSecret(secret types.NamespacedName, keyPair *triple.KeyPair) error {
@@ -272,4 +274,14 @@ func getFirstCert(certs []*x509.Certificate) *x509.Certificate {
 		return nil
 	}
 	return certs[0]
+}
+
+func hasEmptyAnnotationAtSecret(secret corev1.Secret) bool {
+	if secret.Annotations != nil {
+		v, ok := secret.Annotations[secretManagedAnnotatoinKey]
+		if ok && v != "" {
+			return false
+		}
+	}
+	return true
 }

@@ -91,6 +91,17 @@ func (m *Manager) addCertificateToCABundle(caCert *x509.Certificate) error {
 	return nil
 }
 
+func (m *Manager) resetWebhookCABundle() error {
+	m.log.Info("Reset CA bundle with empty value")
+	_, err := m.updateWebhookCABundleWithFunc(func([]byte) ([]byte, error) {
+		return []byte{}, nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to update webhook CABundle")
+	}
+	return nil
+}
+
 func (m *Manager) updateWebhookCABundleWithFunc(updateCABundle func([]byte) ([]byte, error)) (client.Object, error) {
 	m.log.Info("Updating CA bundle for webhook")
 	var webhook client.Object

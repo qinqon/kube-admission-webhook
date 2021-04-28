@@ -9,6 +9,8 @@ import (
 
 	"github.com/go-logr/logr"
 
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -354,4 +356,59 @@ func (m *Manager) verifyTLS() error {
 	}
 
 	return nil
+}
+
+// removeObsoleteCertificateBundles will remove cert and key of secrets and
+// clean webhook configuration CABundle if the secrets are annotated with
+// empty kube-admission-webhook annotation with will mean that it's pre v0.16.0
+// release and the certificate bundles have appended certs instead of prepended
+func (m *Manager) removeObsoleteCertificateBundles() error {
+	caSecret := corev1.Secret{}
+	err := m.get(m.caSecretKey(), &caSecret)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		} else {
+			return err
+		}
+	}
+	if hasEmptyAnnotationAtSecret(caSecret) {
+		err = m.applyCASecret(nil)
+		if err != nil {
+			return err
+		}
+		err = m.resetWebhookCABundle()
+		if err != nil {
+			return err
+		}
+	}
+	webhookConf, err := m.readyWebhookConfiguration()
+	if err != nil {
+		return errors.Wrap(err, "failed getting webhook configuration, forcing rotation")
+	}
+
+	services, err := m.getServicesFromConfiguration(webhookConf)
+	if err != nil {
+		return errors.Wrap(err, "failed getting webhook configuration services, forcing rotation")
+	}
+
+	for service, _ := range services {
+		serviceSecret := corev1.Secret{}
+		err := m.get(service, &serviceSecret)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			} else {
+				return err
+			}
+		}
+		if hasEmptyAnnotationAtSecret(serviceSecret) {
+			err = m.resetAndApplyTLSSecret(service, nil)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+
 }

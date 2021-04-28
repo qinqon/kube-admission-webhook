@@ -89,6 +89,11 @@ func (m *Manager) Reconcile(ctx context.Context, request reconcile.Request) (rec
 	reqLogger := m.log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name).WithName("Reconcile")
 	reqLogger.Info("Reconciling Certificates")
 
+	err := m.removeObsoleteCertificateBundles()
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	elapsedToRotateCA := m.elapsedToRotateCAFromLastDeadline()
 	elapsedToRotateServices := m.elapsedToRotateServicesFromLastDeadline()
 
