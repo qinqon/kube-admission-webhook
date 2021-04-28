@@ -1,5 +1,3 @@
-v0.13.0
+v0.15.0
 
-* Parameterize overlap at certificate cleanup (#43)
-* Bump ginkgo=v1.15.0 gomega=v1.10.5 (#44)
-* Bump to go 1.15 to get SubjectKeyId at CA certificate (#42)
+* Prepend certs instead of append (#48)
