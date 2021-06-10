@@ -3,6 +3,7 @@ package certificate
 import (
 	"context"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -12,6 +13,7 @@ import (
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -90,6 +92,15 @@ func deleteResources() {
 	_ = cli.Delete(context.TODO(), &expectedMutatingWebhookConfiguration)
 	_ = cli.Delete(context.TODO(), &expectedService)
 	_ = cli.Delete(context.TODO(), &expectedSecret)
+	_ = cli.Delete(context.TODO(), &expectedCASecret)
+
+	EventuallyWithOffset(1, func() error {
+		secretKey := types.NamespacedName{
+			Namespace: expectedCASecret.Namespace,
+			Name:      expectedCASecret.Name,
+		}
+		return cli.Get(context.TODO(), secretKey, &corev1.Secret{})
+	}, 10*time.Second, 1*time.Second).ShouldNot(Succeed(), "should eventually fail getting deleted CA secret")
 }
 
 var _ = BeforeSuite(func() {

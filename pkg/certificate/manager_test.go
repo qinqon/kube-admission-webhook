@@ -100,15 +100,35 @@ var _ = Describe("certificate manager", func() {
 		shouldFail        bool
 	}
 
-	newManager := func() *Manager {
+	genericNewManager := func(labels map[string]string) *Manager {
+		options := Options{
+			WebhookName: expectedMutatingWebhookConfiguration.ObjectMeta.Name,
+			WebhookType: MutatingWebhook, Namespace: expectedNamespace.Name,
+			CARotateInterval:   time.Hour,
+			CertRotateInterval: time.Hour,
+		}
+		if labels != nil {
+			options.ExtraLabels = labels
+		}
 
-		manager, err := NewManager(cli, Options{WebhookName: expectedMutatingWebhookConfiguration.ObjectMeta.Name, WebhookType: MutatingWebhook, Namespace: expectedNamespace.Name, CARotateInterval: time.Hour, CertRotateInterval: time.Hour})
-		ExpectWithOffset(1, err).To(Succeed(), "should success creating certificate manager")
+		manager, err := NewManager(cli, options)
+		ExpectWithOffset(2, err).To(Succeed(), "should success creating certificate manager")
 		err = manager.rotateAll()
-		ExpectWithOffset(1, err).To(Succeed(), "should success rotating certs")
+		ExpectWithOffset(2, err).To(Succeed(), "should success rotating certs")
 
 		return manager
 	}
+
+	newManager := func() *Manager {
+		return genericNewManager(nil)
+	}
+
+	const expectedLabelKey = "foo"
+	const expectedLabelValue = "bar"
+	newManagerWithLabels := func() *Manager {
+		return genericNewManager(map[string]string{expectedLabelKey: expectedLabelValue})
+	}
+
 	loadServiceSecret := func(manager *Manager) corev1.Secret {
 		secretKey := types.NamespacedName{
 			Namespace: expectedSecret.ObjectMeta.Namespace,
@@ -156,6 +176,40 @@ var _ = Describe("certificate manager", func() {
 		err := manager.client.Update(context.TODO(), mutatingWebhookConfigurationToUpdate)
 		ExpectWithOffset(1, err).To(Succeed(), "should success updating mutatingwebhookconfiguration")
 	}
+
+	Context("when secrets are created", func() {
+		BeforeEach(func() {
+			createResources()
+		})
+		AfterEach(func() {
+			deleteResources()
+		})
+		Context("without extra labels option", func() {
+			var manager *Manager
+			BeforeEach(func() {
+				manager = newManager()
+			})
+			It("should not have extra labels", func() {
+				obtainedCASecret := loadCASecret(manager)
+				Expect(obtainedCASecret.GetLabels()).To(BeEmpty())
+				obtainedSecret := loadServiceSecret(manager)
+				Expect(obtainedSecret.GetLabels()).To(BeEmpty())
+			})
+		})
+
+		Context("with extra labels option", func() {
+			var manager *Manager
+			BeforeEach(func() {
+				manager = newManagerWithLabels()
+			})
+			It("should have extra labels", func() {
+				obtainedCASecret := loadCASecret(manager)
+				Expect(obtainedCASecret.GetLabels()).To(HaveKeyWithValue(expectedLabelKey, expectedLabelValue))
+				obtainedSecret := loadServiceSecret(manager)
+				Expect(obtainedSecret.GetLabels()).To(HaveKeyWithValue(expectedLabelKey, expectedLabelValue))
+			})
+		})
+	})
 
 	DescribeTable("VerifyTLS",
 		func(c verifyTLSTestCase) {
