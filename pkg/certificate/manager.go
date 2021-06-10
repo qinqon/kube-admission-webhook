@@ -47,7 +47,7 @@ type Manager struct {
 	// caCertDuration Options.CARotateInterval
 	caCertDuration time.Duration
 
-	// caCertDuration Options.CAOverlapInterval
+	// caOverlapDuration Options.CAOverlapInterval
 	caOverlapDuration time.Duration
 
 	// serviceCertDuration Options.CertRotateInterval
