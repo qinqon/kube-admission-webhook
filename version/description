@@ -1,3 +1,8 @@
-v0.15.0
+v0.16.0
 
-* Prepend certs instead of append (#48)
+Add support for relationship labels.
+
+Features:
+* Relationship labels, Label self deployed resources (#51)
+* manager, Fix comment copy paste (#52)
+
