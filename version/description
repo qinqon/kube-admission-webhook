@@ -1,8 +1,6 @@
-v0.16.0
+v0.17.0
 
-Add support for relationship labels.
+* certs, Add Certs list size limit (#54)
 
-Features:
-* Relationship labels, Label self deployed resources (#51)
-* manager, Fix comment copy paste (#52)
+
 
