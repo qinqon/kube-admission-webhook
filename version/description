@@ -1,6 +1,3 @@
-v0.12.0
+v0.12.1
 
-Features:
-* Implement CAOverlapInterval options to ditch old CAs from CABunlde
-* Use a struct to group certificate options (#37)
-* Use new knob for the service certificate rotation (#34)
+* certs, Add Certs list size limit (#56)
