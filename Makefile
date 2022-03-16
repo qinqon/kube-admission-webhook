@@ -4,7 +4,7 @@ WHAT ?= ./pkg/...
 
 all: test
 
-format: $(FMT)
+format:
 	hack/whitespace.sh format
 	gofmt -w ./pkg
 
@@ -19,10 +19,6 @@ test: testenv
 
 build:
 	go build ./pkg/...
-
-vendor:
-	go mod tidy
-	go mod vendor
 
 .PHONY: \
 	test \
