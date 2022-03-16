@@ -202,7 +202,7 @@ func (m *Manager) Reconcile(ctx context.Context, request reconcile.Request) (rec
 		}
 	}
 
-	// Return the event that is going to happend sonner all services certificates rotation,
+	// Return the event that is going to happened sonner all services certificates rotation,
 	// services certificate rotation or ca bundle cleanup
 	m.log.Info("Calculating RequeueAfter", "elapsedToRotateCA", elapsedToRotateCA, "elapsedToRotateServices", elapsedToRotateServices, "elapsedForCABundleCleanup", elapsedForCABundleCleanup, "elapsedForServiceCertsCleanup", elapsedForServiceCertsCleanup)
 	requeueAfter := min(elapsedToRotateCA, elapsedToRotateServices, elapsedForCABundleCleanup, elapsedForServiceCertsCleanup)

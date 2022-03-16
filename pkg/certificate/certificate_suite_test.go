@@ -118,7 +118,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred(), "should success creating client")
 
 	// Ideally we create/delete the namespace at every test but, envtest
-	// cannot delete namespaces [1] so we just create it at the beggining
+	// cannot delete namespaces [1] so we just create it at the beginning
 	// of the test suite.
 	//
 	// [1] https://book.kubebuilder.io/reference/testing/envtest.html?highlight=envtest#testing-considerations

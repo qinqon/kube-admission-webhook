@@ -56,7 +56,7 @@ type Manager struct {
 	// serviceOverlapDuration Options.CertOverlapInterval
 	serviceOverlapDuration time.Duration
 
-	// log initialized log that containes the webhook configuration name and
+	// log initialized log that contains the webhook configuration name and
 	// namespace so it's easy to debug.
 	log logr.Logger
 

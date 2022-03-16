@@ -96,9 +96,9 @@ linters:
     - gosec
     - gosimple
     - govet
-#    - ineffassign
+    - ineffassign
 #    - lll
-#    - misspell
+    - misspell
 #    - nakedret
 #    - noctx
 #    - nolintlint
@@ -112,19 +112,3 @@ linters:
 #    - unused
 #    - varcheck
 #    - whitespace
-
-  # don't enable:
-  # - asciicheck
-  # - scopelint
-  # - gochecknoglobals
-  # - gocognit
-  # - godot
-  # - godox
-  # - goerr113
-  # - interfacer
-  # - maligned
-  # - nestif
-  # - prealloc
-  # - testpackage
-  # - revive
-  # - wsl

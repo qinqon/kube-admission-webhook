@@ -321,7 +321,7 @@ var _ = Describe("Certificates controller", func() {
 			BeforeEach(func() {
 				By("Delete the TLS secret")
 				err := cli.Delete(context.TODO(), &expectedSecret)
-				Expect(err).To(Succeed(), "should succeed deleteing TLS secret")
+				Expect(err).To(Succeed(), "should succeed deleting TLS secret")
 				By("Checking that the TLS secret is deleted")
 				isTLSSecretEventuallyPresent().Should(BeFalse(), "should eventually delete the TLS secret")
 			})
@@ -333,7 +333,7 @@ var _ = Describe("Certificates controller", func() {
 			BeforeEach(func() {
 				By("Delete the CA secret")
 				err := cli.Delete(context.TODO(), &expectedCASecret)
-				Expect(err).To(Succeed(), "should succeed deleteing CA secret")
+				Expect(err).To(Succeed(), "should succeed deleting CA secret")
 				By("Checking that the CA secret is deleted")
 				isCASecretEventuallyPresent().Should(BeFalse(), "should eventually delete the CA secret")
 			})
