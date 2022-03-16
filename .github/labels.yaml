@@ -1,0 +1,15 @@
+area:
+  - 'lib'
+  - 'test'
+  - 'docs'
+  - 'infra'
+
+kind:
+  - 'bug'
+  - 'enhancement'
+  - 'breaking-change'
+
+priority:
+  - 'low'
+  - 'mid'
+  - 'high'
