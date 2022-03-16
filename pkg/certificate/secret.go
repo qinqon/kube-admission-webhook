@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	//nolint:gosec
 	secretManagedAnnotatoinKey = "kubevirt.io/kube-admission-webhook"
 	CACertKey                  = "ca.crt"
 	CAPrivateKeyKey            = "ca.key"

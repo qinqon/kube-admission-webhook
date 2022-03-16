@@ -92,8 +92,8 @@ linters:
 #    - goheader
     - goimports
     - gomnd
-#    - goprintffuncname
-#    - gosec
+    - goprintffuncname
+    - gosec
 #    - gosimple
 #    - govet
 #    - ineffassign
