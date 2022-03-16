@@ -90,8 +90,8 @@ linters:
     - gocyclo
     - gofmt
 #    - goheader
-#    - goimports
-#    - gomnd
+    - goimports
+    - gomnd
 #    - goprintffuncname
 #    - gosec
 #    - gosimple
