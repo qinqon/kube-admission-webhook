@@ -2,15 +2,6 @@ SHELL := /bin/bash
 
 BIN_DIR = $(CURDIR)/build/_output/bin/
 
-export GOFLAGS=-mod=vendor
-export GO111MODULE=on
-export GOROOT=$(BIN_DIR)/go/
-export GOBIN=$(GOROOT)/bin/
-export PATH := $(GOROOT)/bin:$(PATH)
-
-GO ?= $(GOBIN)/go
-GOFMT ?= $(GOBIN)/gofmt
-
 WHAT ?= ./pkg/...
 
 KUBEVIRT_PROVIDER=kind-k8s-1.14.2
@@ -32,33 +23,30 @@ all: test
 $(CLUSTER_DIR)/%: $(install_kubevirtci)
 	$(install_kubevirtci)
 
-$(GITHUB_RELEASE): $(GO)
-	$(GO) install ./vendor/github.com/github-release/github-release
+$(GITHUB_RELEASE):
+	go install ./vendor/github.com/github-release/github-release
 
-$(GO):
-	hack/install-go.sh $(BIN_DIR)
 
-$(GOFMT): $(GO)
 
 format: $(FMT)
 	hack/whitespace.sh format
-	$(GOFMT) -w ./pkg
+	gofmt -w ./pkg
 
-vet: $(GO)
-	$(GO) vet ./pkg/...
+vet:
+	go vet ./pkg/...
 
 testenv:
 	hack/setup-testenv.sh
 
-test: $(GO) testenv
-	KUBEBUILDER_ASSETS=$(BIN_DIR) $(GO) test $(WHAT) -timeout 2m -ginkgo.v -ginkgo.noColor=false  -test.v
+test: testenv
+	KUBEBUILDER_ASSETS=$(BIN_DIR) go test $(WHAT) -timeout 2m -ginkgo.v -ginkgo.noColor=false  -test.v
 
 build:
-	$(GO) build ./pkg/...
+	go build ./pkg/...
 
-vendor: $(GO)
-	$(GO) mod tidy
-	$(GO) mod vendor
+vendor:
+	go mod tidy
+	go mod vendor
 
 cluster-up: $(CLUSTER_UP)
 	$(CLUSTER_UP)
