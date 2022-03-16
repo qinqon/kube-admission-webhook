@@ -104,7 +104,8 @@ func (m *Manager) updateWebhookCABundleWithFunc(updateCABundle func([]byte) ([]b
 
 		for _, clientConfig := range m.clientConfigList(webhook) {
 			// Update the CA bundle at webhook
-			updatedCABundle, err := updateCABundle(clientConfig.CABundle)
+			var updatedCABundle []byte
+			updatedCABundle, err = updateCABundle(clientConfig.CABundle)
 			if err != nil {
 				return errors.Wrap(err, "failed updating CA bundle")
 			}
@@ -130,7 +131,7 @@ func (m *Manager) CABundle() ([]byte, error) {
 	}
 
 	clientConfigList := m.clientConfigList(webhook)
-	if clientConfigList == nil || len(clientConfigList) == 0 {
+	if len(clientConfigList) == 0 {
 		return nil, errors.Wrapf(err, "failed to access CABundle clientConfigList is empty in %s webhook configuration %s", m.webhookType, m.webhookName)
 	}
 

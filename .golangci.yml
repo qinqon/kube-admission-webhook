@@ -94,8 +94,8 @@ linters:
     - gomnd
     - goprintffuncname
     - gosec
-#    - gosimple
-#    - govet
+    - gosimple
+    - govet
 #    - ineffassign
 #    - lll
 #    - misspell

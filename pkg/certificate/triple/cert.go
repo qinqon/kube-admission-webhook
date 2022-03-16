@@ -166,7 +166,7 @@ func VerifyTLS(certsPEM, keyPEM, caBundle []byte) error {
 		CurrentTime: Now(),
 	}
 
-	if _, err := certs[0].Verify(opts); err != nil {
+	if _, err = certs[0].Verify(opts); err != nil {
 		return errors.Wrap(err, "failed to verify certificate")
 	}
 

@@ -115,7 +115,8 @@ func (m *Manager) applySecret(secretKey types.NamespacedName, secretType corev1.
 					},
 					Type: secretType,
 				}
-				populatedSecret, err := populateSecretFn(newSecret, keyPair)
+				var populatedSecret *corev1.Secret
+				populatedSecret, err = populateSecretFn(newSecret, keyPair)
 				if err != nil {
 					return errors.Wrap(err, "failed populating secret")
 				}
