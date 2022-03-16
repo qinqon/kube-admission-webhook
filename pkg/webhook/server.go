@@ -41,7 +41,7 @@ import (
 	"github.com/qinqon/kube-admission-webhook/pkg/webhook/internal/metrics"
 )
 
-var log = logf.Log.WithName("PoolManager")
+var log = logf.Log.WithName("WebhookServer")
 
 // DefaultPort is the default port that the webhook server serves.
 var DefaultPort = 9443
@@ -82,6 +82,10 @@ type Server struct {
 	// TLSVersion is the minimum version of TLS supported. Accepts
 	// "", "1.0", "1.1", "1.2" and "1.3" only ("" is equivalent to "1.0" for backwards compatibility)
 	TLSMinVersion string
+
+	// CipherSuites is used to specify the cipher algorithms that are negotiated
+	// during the TLS handshake, refer to https://pkg.go.dev/crypto/tls#CipherSuites
+	CipherSuites []string
 
 	// WebhookMux is the multiplexer that handles different webhooks.
 	WebhookMux *http.ServeMux
@@ -211,6 +215,22 @@ func tlsVersion(version string) (uint16, error) {
 	}
 }
 
+func cipherSuitesIDs(names []string) ([]uint16, error) {
+	idByName := map[string]uint16{}
+	for _, cipherSuite := range tls.CipherSuites() {
+		idByName[cipherSuite.Name] = cipherSuite.ID
+	}
+	ids := []uint16{}
+	for _, name := range names {
+		id, ok := idByName[name]
+		if !ok {
+			return nil, fmt.Errorf("invalid CipherSuite name '%s'", name)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
 // Start runs the server.
 // It will install the webhook related resources depend on the server configuration.
 func (s *Server) Start(ctx context.Context) error {
@@ -238,10 +258,16 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
+	cipherSuites, err := cipherSuitesIDs(s.CipherSuites)
+	if err != nil {
+		return err
+	}
+
 	cfg := &tls.Config{ //nolint:gosec
 		NextProtos:     []string{"h2"},
 		GetCertificate: certWatcher.GetCertificate,
 		MinVersion:     tlsMinVersion,
+		CipherSuites:   cipherSuites,
 	}
 
 	// load CA to verify client certificate
