@@ -4,12 +4,8 @@ WHAT ?= ./pkg/...
 
 all: test
 
-format:
-	hack/whitespace.sh format
-	gofmt -w ./pkg
-
-vet:
-	go vet ./pkg/...
+lint:
+	hack/lint.sh
 
 testenv:
 	hack/setup-testenv.sh
