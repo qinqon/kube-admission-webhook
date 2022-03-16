@@ -356,13 +356,6 @@ var _ = Describe("Certificates controller", func() {
 	})
 })
 
-func getSecret() corev1.Secret {
-	obtainedSecret := corev1.Secret{}
-	err := cli.Get(context.TODO(), types.NamespacedName{Namespace: expectedSecret.Namespace, Name: expectedSecret.Name}, &obtainedSecret)
-	Expect(err).To(Succeed(), "should succeed getting TLS secret")
-	return obtainedSecret
-}
-
 func getWebhookConfiguration() admissionregistrationv1.MutatingWebhookConfiguration {
 	obtainedWebhookConfiguration := admissionregistrationv1.MutatingWebhookConfiguration{}
 	err := cli.Get(context.TODO(), types.NamespacedName{
