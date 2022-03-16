@@ -105,6 +105,8 @@ func deleteResources() {
 
 var _ = BeforeSuite(func() {
 
+	klog.InitFlags(nil)
+
 	testEnv = &envtest.Environment{
 		UseExistingCluster: &useCluster,
 	}
@@ -136,10 +138,6 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred(), "should success stopping testenv")
 })
-
-func init() {
-	klog.InitFlags(nil)
-}
 
 func TestCertificate(t *testing.T) {
 	RegisterFailHandler(Fail)

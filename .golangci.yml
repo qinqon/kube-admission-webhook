@@ -81,11 +81,11 @@ linters:
     - dogsled
     - dupl
     - errcheck
-#    - exportloopref
-#    - exhaustive
-#    - funlen
-#    - gochecknoinits
-#    - goconst
+    - exportloopref
+    - exhaustive
+    - funlen
+    - gochecknoinits
+    - goconst
 #    - gocritic
 #    - gocyclo
 #    - gofmt
