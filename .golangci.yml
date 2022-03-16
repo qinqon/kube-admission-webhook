@@ -80,7 +80,7 @@ linters:
     - depguard
     - dogsled
     - dupl
-#    - errcheck
+    - errcheck
 #    - exportloopref
 #    - exhaustive
 #    - funlen
