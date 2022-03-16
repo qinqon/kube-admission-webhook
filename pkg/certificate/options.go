@@ -73,8 +73,8 @@ func (o *Options) validate() error {
 
 }
 
-func (o Options) withDefaults() Options {
-	withDefaultsOptions := o
+func (o *Options) withDefaults() Options {
+	withDefaultsOptions := *o
 	if o.WebhookType == "" {
 		withDefaultsOptions.WebhookType = MutatingWebhook
 	}

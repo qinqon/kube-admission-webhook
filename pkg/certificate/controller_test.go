@@ -69,7 +69,7 @@ var _ = Describe("Certificates controller", func() {
 	BeforeEach(func() {
 
 		var err error
-		mgr, err = NewManager(cli, Options{
+		mgr, err = NewManager(cli, &Options{
 			WebhookName:         expectedMutatingWebhookConfiguration.Name,
 			WebhookType:         MutatingWebhook,
 			Namespace:           expectedNamespace.Name,
@@ -356,17 +356,17 @@ var _ = Describe("Certificates controller", func() {
 	})
 })
 
-func getWebhookConfiguration() admissionregistrationv1.MutatingWebhookConfiguration {
-	obtainedWebhookConfiguration := admissionregistrationv1.MutatingWebhookConfiguration{}
+func getWebhookConfiguration() *admissionregistrationv1.MutatingWebhookConfiguration {
+	obtainedWebhookConfiguration := &admissionregistrationv1.MutatingWebhookConfiguration{}
 	err := cli.Get(context.TODO(), types.NamespacedName{
 		Namespace: expectedMutatingWebhookConfiguration.Namespace,
 		Name:      expectedMutatingWebhookConfiguration.Name,
-	}, &obtainedWebhookConfiguration)
+	}, obtainedWebhookConfiguration)
 	Expect(err).To(Succeed(), "should succeed getting mutating webhook configuration")
 	return obtainedWebhookConfiguration
 }
 
-func updateWebhookConfiguration(webhookConfiguration admissionregistrationv1.MutatingWebhookConfiguration) {
-	err := cli.Update(context.TODO(), &webhookConfiguration)
+func updateWebhookConfiguration(webhookConfiguration *admissionregistrationv1.MutatingWebhookConfiguration) {
+	err := cli.Update(context.TODO(), webhookConfiguration)
 	Expect(err).To(Succeed(), "should succeed update mutatingwebhookconfiguration")
 }

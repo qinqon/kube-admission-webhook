@@ -38,7 +38,7 @@ func NewCA(name string, duration time.Duration) (*KeyPair, error) {
 		CommonName: name,
 	}
 
-	cert, err := NewSelfSignedCACert(config, key, duration)
+	cert, err := NewSelfSignedCACert(&config, key, duration)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create a self-signed certificate for a new CA: %v", err)
 	}
@@ -72,7 +72,7 @@ func NewServerKeyPair(ca *KeyPair, commonName, svcName, svcNamespace, dnsDomain 
 	altNames.DNSNames = append(altNames.DNSNames, hostnames...)
 	altNames.DNSNames = append(altNames.DNSNames, internalAPIServerFQDN...)
 
-	config := Config{
+	config := &Config{
 		CommonName: commonName,
 		AltNames:   altNames,
 		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
@@ -94,7 +94,7 @@ func NewClientKeyPair(ca *KeyPair, commonName string, organizations []string, du
 		return nil, fmt.Errorf("unable to create a client private key: %v", err)
 	}
 
-	config := Config{
+	config := &Config{
 		CommonName:   commonName,
 		Organization: organizations,
 		Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},

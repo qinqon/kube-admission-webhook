@@ -111,7 +111,7 @@ var _ = Describe("certificate manager", func() {
 			options.ExtraLabels = labels
 		}
 
-		manager, err := NewManager(cli, options)
+		manager, err := NewManager(cli, &options)
 		ExpectWithOffset(2, err).To(Succeed(), "should success creating certificate manager")
 		err = manager.rotateAll()
 		ExpectWithOffset(2, err).To(Succeed(), "should success rotating certs")

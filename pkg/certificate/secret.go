@@ -23,7 +23,7 @@ const (
 	CAPrivateKeyKey            = "ca.key"
 )
 
-func populateCASecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
+func populateCASecret(secret *corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
 	if secret.Annotations == nil {
 		secret.Annotations = map[string]string{}
 	}
@@ -32,7 +32,7 @@ func populateCASecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Se
 		CACertKey:       triple.EncodeCertPEM(keyPair.Cert),
 		CAPrivateKeyKey: triple.EncodePrivateKeyPEM(keyPair.Key),
 	}
-	return &secret, nil
+	return secret, nil
 }
 
 func addTLSCertificate(data map[string][]byte, cert *x509.Certificate) error {
@@ -58,18 +58,18 @@ func setAnnotation(secret *corev1.Secret) {
 	secret.Annotations[secretManagedAnnotatoinKey] = ""
 }
 
-func resetTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
-	setAnnotation(&secret)
+func resetTLSSecret(secret *corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
+	setAnnotation(secret)
 
 	secret.Data = map[string][]byte{
 		corev1.TLSPrivateKeyKey: triple.EncodePrivateKeyPEM(keyPair.Key),
 		corev1.TLSCertKey:       triple.EncodeCertPEM(keyPair.Cert),
 	}
-	return &secret, nil
+	return secret, nil
 }
 
-func appendTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
-	setAnnotation(&secret)
+func appendTLSSecret(secret *corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
+	setAnnotation(secret)
 
 	if secret.Data == nil {
 		secret.Data = map[string][]byte{}
@@ -82,7 +82,7 @@ func appendTLSSecret(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Sec
 
 	secret.Data[corev1.TLSPrivateKeyKey] = triple.EncodePrivateKeyPEM(keyPair.Key)
 
-	return &secret, nil
+	return secret, nil
 }
 
 func (m *Manager) resetAndApplyTLSSecret(secret types.NamespacedName, keyPair *triple.KeyPair) error {
@@ -98,14 +98,14 @@ func (m *Manager) applyCASecret(keyPair *triple.KeyPair) error {
 }
 
 func (m *Manager) applySecret(secretKey types.NamespacedName, secretType corev1.SecretType, keyPair *triple.KeyPair,
-	populateSecretFn func(corev1.Secret, *triple.KeyPair) (*corev1.Secret, error)) error {
-	secret := corev1.Secret{}
+	populateSecretFn func(*corev1.Secret, *triple.KeyPair) (*corev1.Secret, error)) error {
+	secret := &corev1.Secret{}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		err := m.get(secretKey, &secret)
+		err := m.get(secretKey, secret)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				newSecret := corev1.Secret{
+				newSecret := &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:        secretKey.Name,
 						Namespace:   secretKey.Namespace,

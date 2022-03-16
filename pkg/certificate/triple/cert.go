@@ -42,7 +42,7 @@ const (
 )
 
 var (
-	Now = func() time.Time { return time.Now() }
+	Now = time.Now
 )
 
 // Config contains the basic fields required for creating a certificate
@@ -67,7 +67,7 @@ func NewPrivateKey() (*rsa.PrivateKey, error) {
 }
 
 // NewSelfSignedCACert creates a CA certificate
-func NewSelfSignedCACert(cfg Config, key crypto.Signer, duration time.Duration) (*x509.Certificate, error) {
+func NewSelfSignedCACert(cfg *Config, key crypto.Signer, duration time.Duration) (*x509.Certificate, error) {
 	now := Now()
 	tmpl := x509.Certificate{
 		SerialNumber: new(big.Int).SetInt64(0),
@@ -89,12 +89,12 @@ func NewSelfSignedCACert(cfg Config, key crypto.Signer, duration time.Duration) 
 }
 
 // NewSignedCert creates a signed certificate using the given CA certificate and key
-func NewSignedCert(cfg Config, key crypto.Signer, caCert *x509.Certificate, caKey crypto.Signer, duration time.Duration) (*x509.Certificate, error) {
+func NewSignedCert(cfg *Config, key crypto.Signer, caCert *x509.Certificate, caKey crypto.Signer, duration time.Duration) (*x509.Certificate, error) {
 	serial, err := rand.Int(rand.Reader, new(big.Int).SetInt64(math.MaxInt64))
 	if err != nil {
 		return nil, err
 	}
-	if len(cfg.CommonName) == 0 {
+	if cfg.CommonName == "" {
 		return nil, errors.New("must specify a CommonName")
 	}
 	if len(cfg.Usages) == 0 {

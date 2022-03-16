@@ -10,7 +10,7 @@ import (
 	"github.com/go-logr/logr"
 
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/qinqon/kube-admission-webhook/pkg/certificate/triple"
@@ -23,7 +23,7 @@ import (
 // at cluster to monitor expiration time and do rotations.
 type Manager struct {
 	// client contains the controller-runtime client from the manager.
-	client client.Client
+	client crclient.Client
 
 	// webhookName Options.WebhookName
 	webhookName string
@@ -82,8 +82,8 @@ type Manager struct {
 // It will also update the webhook caBundle field with the cluster CA cert and
 // approve the generated cert/key with k8s certification approval mechanism
 func NewManager(
-	client client.Client,
-	options Options,
+	client crclient.Client,
+	options *Options,
 ) (*Manager, error) {
 	err := options.setDefaultsAndValidate()
 	if err != nil {

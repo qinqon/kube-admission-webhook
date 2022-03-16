@@ -38,13 +38,13 @@ func (m *Manager) clientConfigList(webhook client.Object) []*admissionregistrati
 	clientConfigList := []*admissionregistrationv1.WebhookClientConfig{}
 	if m.webhookType == MutatingWebhook {
 		mutatingWebhookConfig := mutatingWebhookConfig(webhook)
-		for i, _ := range mutatingWebhookConfig.Webhooks {
+		for i := range mutatingWebhookConfig.Webhooks {
 			clientConfig := &mutatingWebhookConfig.Webhooks[i].ClientConfig
 			clientConfigList = append(clientConfigList, clientConfig)
 		}
 	} else if m.webhookType == ValidatingWebhook {
 		validatingWebhookConfig := validatingWebhookConfig(webhook)
-		for i, _ := range validatingWebhookConfig.Webhooks {
+		for i := range validatingWebhookConfig.Webhooks {
 			clientConfig := &validatingWebhookConfig.Webhooks[i].ClientConfig
 			clientConfigList = append(clientConfigList, clientConfig)
 		}

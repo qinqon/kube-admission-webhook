@@ -113,7 +113,7 @@ func (m *Manager) cleanUpServiceCerts() error {
 	}
 
 	for service, _ := range services {
-		err := m.applySecret(service, corev1.SecretTypeTLS, nil, func(secret corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
+		err := m.applySecret(service, corev1.SecretTypeTLS, nil, func(secret *corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
 			certPEM, found := secret.Data[corev1.TLSCertKey]
 			if !found {
 				return nil, errors.Wrapf(err, "TLS cert not found at secret %s to clean up ", service)
@@ -127,7 +127,7 @@ func (m *Manager) cleanUpServiceCerts() error {
 			cleanedCerts := m.cleanUpCertificates(certs)
 			pem := triple.EncodeCertsPEM(cleanedCerts)
 			secret.Data[corev1.TLSCertKey] = pem
-			return &secret, nil
+			return secret, nil
 		})
 		if err != nil {
 			return err
