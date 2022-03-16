@@ -97,7 +97,7 @@ func (m *Manager) isServiceSecret(object client.Object) bool {
 		return false
 	}
 
-	for service, _ := range services {
+	for service := range services {
 		if object.GetName() == service.Name {
 			return true
 		}

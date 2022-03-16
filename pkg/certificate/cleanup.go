@@ -36,7 +36,7 @@ func (m *Manager) earliestElapsedForServiceCertsCleanup() (time.Duration, error)
 	}
 
 	elapsedTimesForCleanup := []time.Duration{}
-	for service, _ := range services {
+	for service := range services {
 
 		certs, err := m.getTLSCerts(service)
 		if err != nil {
@@ -112,7 +112,7 @@ func (m *Manager) cleanUpServiceCerts() error {
 		return fmt.Errorf("failed getting services to do the cleanup: %w", err)
 	}
 
-	for service, _ := range services {
+	for service := range services {
 		err := m.applySecret(service, corev1.SecretTypeTLS, nil, func(secret *corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
 			certPEM, found := secret.Data[corev1.TLSCertKey]
 			if !found {

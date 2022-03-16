@@ -231,7 +231,7 @@ func (m *Manager) nextRotationDeadlineForServices() time.Time {
 	// Iterate the `services` to find the the certificate with a sooner
 	// expiration time
 	var nextToExpireServiceCert *x509.Certificate
-	for service, _ := range services {
+	for service := range services {
 
 		tlsKeyPair, err := m.getTLSKeyPair(service)
 		if err != nil {
