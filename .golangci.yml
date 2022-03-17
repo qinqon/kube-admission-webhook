@@ -106,8 +106,8 @@ linters:
     - staticcheck
     - structcheck
     - stylecheck
-#    - typecheck
-#    - unconvert
+    - typecheck
+    - unconvert
 #    - unparam
 #    - unused
 #    - varcheck

@@ -40,7 +40,7 @@ func addTLSCertificate(data map[string][]byte, cert *x509.Certificate) error {
 
 	certsPEM, hasCerts := data[corev1.TLSCertKey]
 	if hasCerts {
-		certsPEMBytes, err := triple.AddCertToPEM(cert, []byte(certsPEM), triple.CertsListSizeLimit)
+		certsPEMBytes, err := triple.AddCertToPEM(cert, certsPEM, triple.CertsListSizeLimit)
 		if err != nil {
 			return err
 		}

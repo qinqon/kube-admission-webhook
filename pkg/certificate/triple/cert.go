@@ -154,7 +154,7 @@ func VerifyTLS(certsPEM, keyPEM, caBundle []byte) error {
 	}
 
 	cas := x509.NewCertPool()
-	ok := cas.AppendCertsFromPEM([]byte(caBundle))
+	ok := cas.AppendCertsFromPEM(caBundle)
 	if !ok {
 		return errors.New("failed to parse CA bundle")
 	}
