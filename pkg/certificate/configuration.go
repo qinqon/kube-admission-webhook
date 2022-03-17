@@ -59,7 +59,7 @@ func (m *Manager) readyWebhookConfiguration() (client.Object, error) {
 	} else if m.webhookType == ValidatingWebhook {
 		webhook = &admissionregistrationv1.ValidatingWebhookConfiguration{}
 	} else {
-		return nil, fmt.Errorf("Unknown webhook type %s", m.webhookType)
+		return nil, fmt.Errorf("unknown webhook type %s", m.webhookType)
 	}
 	pollInterval := time.Second
 	pollTimeout := 120 * time.Second

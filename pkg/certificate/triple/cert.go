@@ -21,7 +21,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
@@ -63,7 +62,7 @@ type AltNames struct {
 
 // NewPrivateKey creates an RSA private key
 func NewPrivateKey() (*rsa.PrivateKey, error) {
-	return rsa.GenerateKey(cryptorand.Reader, rsaKeySize)
+	return rsa.GenerateKey(rand.Reader, rsaKeySize)
 }
 
 // NewSelfSignedCACert creates a CA certificate
@@ -81,7 +80,7 @@ func NewSelfSignedCACert(cfg *Config, key crypto.Signer, duration time.Duration)
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 	}
-	certDERBytes, err := x509.CreateCertificate(cryptorand.Reader, &tmpl, &tmpl, key.Public(), key)
+	certDERBytes, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, key.Public(), key)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +114,7 @@ func NewSignedCert(cfg *Config, key crypto.Signer, caCert *x509.Certificate, caK
 		ExtKeyUsage:  cfg.Usages,
 	}
 
-	certDERBytes, err := x509.CreateCertificate(cryptorand.Reader, &certTmpl, caCert, key.Public(), caKey)
+	certDERBytes, err := x509.CreateCertificate(rand.Reader, &certTmpl, caCert, key.Public(), caKey)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +123,7 @@ func NewSignedCert(cfg *Config, key crypto.Signer, caCert *x509.Certificate, caK
 
 // MakeEllipticPrivateKeyPEM creates an ECDSA private key
 func MakeEllipticPrivateKeyPEM() ([]byte, error) {
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, err
 	}
