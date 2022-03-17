@@ -83,7 +83,7 @@ func (m *Manager) readyWebhookConfiguration() (client.Object, error) {
 
 func (m *Manager) addCertificateToCABundle(caCert *x509.Certificate) error {
 	m.log.Info("Reset CA bundle with one cert for webhook")
-	_, err := m.updateWebhookCABundleWithFunc(func(currentCABundle []byte) ([]byte, error) {
+	err := m.updateWebhookCABundleWithFunc(func(currentCABundle []byte) ([]byte, error) {
 		return triple.AddCertToPEM(caCert, currentCABundle, triple.CertsListSizeLimit)
 	})
 	if err != nil {
@@ -92,7 +92,7 @@ func (m *Manager) addCertificateToCABundle(caCert *x509.Certificate) error {
 	return nil
 }
 
-func (m *Manager) updateWebhookCABundleWithFunc(updateCABundle func([]byte) ([]byte, error)) (client.Object, error) {
+func (m *Manager) updateWebhookCABundleWithFunc(updateCABundle func([]byte) ([]byte, error)) error {
 	m.log.Info("Updating CA bundle for webhook")
 	var webhook client.Object
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -119,9 +119,9 @@ func (m *Manager) updateWebhookCABundleWithFunc(updateCABundle func([]byte) ([]b
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to update webhook CABundle")
+		return errors.Wrap(err, "failed to update webhook CABundle")
 	}
-	return webhook, nil
+	return nil
 }
 
 func (m *Manager) CABundle() ([]byte, error) {

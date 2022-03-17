@@ -22,11 +22,11 @@ import (
 // Add creates a new Node Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (m *Manager) Add(mgr manager.Manager) error {
-	return m.add(mgr, m)
+	return m.add(mgr)
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func (m *Manager) add(mgr manager.Manager, r reconcile.Reconciler) error {
+func (m *Manager) add(mgr manager.Manager) error {
 	logger := m.log.WithName("add")
 	// Create a new controller
 	c, err := controller.New("certificate-controller", mgr, controller.Options{Reconciler: m})

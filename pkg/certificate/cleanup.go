@@ -84,7 +84,7 @@ func (m *Manager) earliestCleanupDeadlineForCerts(certificates []*x509.Certifica
 
 func (m *Manager) cleanUpCABundle() error {
 	m.log.Info("cleanUpCABundle")
-	_, err := m.updateWebhookCABundleWithFunc(func([]byte) ([]byte, error) {
+	err := m.updateWebhookCABundleWithFunc(func([]byte) ([]byte, error) {
 		cas, err := m.getCACertsFromCABundle()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed getting ca certs to start cleanup")
