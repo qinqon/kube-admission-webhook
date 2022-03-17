@@ -119,15 +119,15 @@ func (s *Server) setDefaults() {
 		s.Port = DefaultPort
 	}
 
-	if len(s.CertDir) == 0 {
+	if s.CertDir == "" {
 		s.CertDir = filepath.Join(os.TempDir(), "k8s-webhook-server", "serving-certs")
 	}
 
-	if len(s.CertName) == 0 {
+	if s.CertName == "" {
 		s.CertName = "tls.crt"
 	}
 
-	if len(s.KeyName) == 0 {
+	if s.KeyName == "" {
 		s.KeyName = "tls.key"
 	}
 }
@@ -199,7 +199,7 @@ func (s *Server) StartStandalone(ctx context.Context, scheme *runtime.Scheme) er
 // to the values accepted by tls.Config (for example 0x301).
 func tlsVersion(version string) (uint16, error) {
 	switch version {
-	// default is previous behaviour
+	// default is previous behavior
 	case "":
 		return tls.VersionTLS10, nil
 	case "1.0":
@@ -248,7 +248,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	go func() {
-		if err := certWatcher.Start(ctx); err != nil {
+		if err = certWatcher.Start(ctx); err != nil {
 			log.Error(err, "certificate watcher error")
 		}
 	}()
@@ -273,7 +273,8 @@ func (s *Server) Start(ctx context.Context) error {
 	// load CA to verify client certificate
 	if s.ClientCAName != "" {
 		certPool := x509.NewCertPool()
-		clientCABytes, err := ioutil.ReadFile(filepath.Join(s.CertDir, s.ClientCAName))
+		var clientCABytes []byte
+		clientCABytes, err = ioutil.ReadFile(filepath.Join(s.CertDir, s.ClientCAName))
 		if err != nil {
 			return fmt.Errorf("failed to read client CA cert: %v", err)
 		}
