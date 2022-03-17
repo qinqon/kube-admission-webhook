@@ -1,3 +1,19 @@
+/*
+ * Copyright 2022 Kube Admission Webhook Authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *	  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package certificate
 
 import (
@@ -44,7 +60,8 @@ var _ = Describe("certificate manager", func() {
 
 			deadline := m.nextRotationDeadlineForCert(caCert, c.overlap)
 
-			Expect(deadline).To(Equal(lowerBound), fmt.Sprintf("should match deadline for notBefore %v, notAfter %v and overlap %v", notBefore, notAfter, c.overlap))
+			Expect(deadline).To(Equal(lowerBound),
+				fmt.Sprintf("should match deadline for notBefore %v, notAfter %v and overlap %v", notBefore, notAfter, c.overlap))
 
 		},
 		Entry("just issued, still good", nextRotationDeadlineForCertCase{
@@ -111,7 +128,7 @@ var _ = Describe("certificate manager", func() {
 			options.ExtraLabels = labels
 		}
 
-		manager, err := NewManager(cli, options)
+		manager, err := NewManager(cli, &options)
 		ExpectWithOffset(2, err).To(Succeed(), "should success creating certificate manager")
 		err = manager.rotateAll()
 		ExpectWithOffset(2, err).To(Succeed(), "should success rotating certs")
@@ -172,7 +189,8 @@ var _ = Describe("certificate manager", func() {
 		return obtainedMutatingWebhookConfiguration
 	}
 
-	updateMutatingWebhook := func(manager *Manager, mutatingWebhookConfigurationToUpdate *admissionregistrationv1.MutatingWebhookConfiguration) {
+	updateMutatingWebhook := func(manager *Manager,
+		mutatingWebhookConfigurationToUpdate *admissionregistrationv1.MutatingWebhookConfiguration) {
 		err := manager.client.Update(context.TODO(), mutatingWebhookConfigurationToUpdate)
 		ExpectWithOffset(1, err).To(Succeed(), "should success updating mutatingwebhookconfiguration")
 	}

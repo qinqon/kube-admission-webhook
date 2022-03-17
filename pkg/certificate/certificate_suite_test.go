@@ -1,3 +1,19 @@
+/*
+ * Copyright 2022 Kube Admission Webhook Authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *	  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package certificate
 
 import (
@@ -105,6 +121,8 @@ func deleteResources() {
 
 var _ = BeforeSuite(func() {
 
+	klog.InitFlags(nil)
+
 	testEnv = &envtest.Environment{
 		UseExistingCluster: &useCluster,
 	}
@@ -116,7 +134,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred(), "should success creating client")
 
 	// Ideally we create/delete the namespace at every test but, envtest
-	// cannot delete namespaces [1] so we just create it at the beggining
+	// cannot delete namespaces [1] so we just create it at the beginning
 	// of the test suite.
 	//
 	// [1] https://book.kubebuilder.io/reference/testing/envtest.html?highlight=envtest#testing-considerations
@@ -136,10 +154,6 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred(), "should success stopping testenv")
 })
-
-func init() {
-	klog.InitFlags(nil)
-}
 
 func TestCertificate(t *testing.T) {
 	RegisterFailHandler(Fail)
