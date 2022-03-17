@@ -37,7 +37,6 @@ func (m *Manager) earliestElapsedForServiceCertsCleanup() (time.Duration, error)
 
 	elapsedTimesForCleanup := []time.Duration{}
 	for service := range services {
-
 		certs, err := m.getTLSCerts(service)
 		if err != nil {
 			return time.Duration(0), fmt.Errorf("failed getting TLS keypair from service %s to calculate cleanup next run: %w", service, err)

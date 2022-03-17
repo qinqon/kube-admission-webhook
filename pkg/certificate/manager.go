@@ -232,7 +232,6 @@ func (m *Manager) nextRotationDeadlineForServices() time.Time {
 	// expiration time
 	var nextToExpireServiceCert *x509.Certificate
 	for service := range services {
-
 		tlsKeyPair, err := m.getTLSKeyPair(service)
 		if err != nil {
 			m.log.Info(fmt.Sprintf("failed getting TLS keypair from service %s , forcing rotation: %v", service, err))
@@ -326,7 +325,6 @@ func (m *Manager) elapsedToRotateServicesFromLastDeadline() time.Duration {
 // verifyTLS will verify that the caBundle and Secret are valid and can
 // be used to verify
 func (m *Manager) verifyTLS() error {
-
 	webhookConf, err := m.readyWebhookConfiguration()
 	if err != nil {
 		return errors.Wrap(err, "failed to reading configuration")

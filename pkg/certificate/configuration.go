@@ -143,11 +143,9 @@ func (m *Manager) CABundle() ([]byte, error) {
 // ServiceRef it will reference fake one with webhook name, mgr namespace and
 // passing the url hostname at map value
 func (m *Manager) getServicesFromConfiguration(configuration client.Object) (map[types.NamespacedName][]string, error) {
-
 	services := map[types.NamespacedName][]string{}
 
 	for _, clientConfig := range m.clientConfigList(configuration) {
-
 		service := types.NamespacedName{}
 		hostnames := []string{}
 

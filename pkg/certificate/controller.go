@@ -134,7 +134,6 @@ func (m *Manager) Reconcile(ctx context.Context, request reconcile.Request) (rec
 
 	// We have pass expiration time for the CA
 	if elapsedToRotateCA <= 0 {
-
 		// If rotate fails runtime-controller manager will re-enqueue it, so
 		// it will be retried
 		err := m.rotateAll()
@@ -150,7 +149,6 @@ func (m *Manager) Reconcile(ctx context.Context, request reconcile.Request) (rec
 		// Also recalculate it for serices certificate since they has changed
 		m.nextRotationDeadlineForServices()
 		elapsedToRotateServices = m.elapsedToRotateServicesFromLastDeadline()
-
 	} else if elapsedToRotateServices <= 0 {
 		// CA is ok but expiration but we have passed expiration time for service certificates
 		err := m.rotateServicesWithOverlap()

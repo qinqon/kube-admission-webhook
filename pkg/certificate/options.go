@@ -70,7 +70,6 @@ func (o *Options) validate() error {
 	}
 
 	return nil
-
 }
 
 func (o *Options) withDefaults() Options {
