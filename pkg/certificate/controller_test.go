@@ -54,7 +54,8 @@ var _ = Describe("Certificates controller", func() {
 		isCASecretEventuallyPresent = func() AsyncAssertion {
 			return Eventually(func() (bool, error) {
 				obtainedSecret := corev1.Secret{}
-				err := cli.Get(context.TODO(), types.NamespacedName{Namespace: expectedCASecret.Namespace, Name: expectedCASecret.Name}, &obtainedSecret)
+				err := cli.Get(context.TODO(), types.NamespacedName{
+					Namespace: expectedCASecret.Namespace, Name: expectedCASecret.Name}, &obtainedSecret)
 				if err != nil {
 					if apierrors.IsNotFound(err) {
 						return false, nil
@@ -145,18 +146,23 @@ var _ = Describe("Certificates controller", func() {
 		})
 
 		It("should create TLS cert/key with proper annotation and return proper deadline", func() {
-			Expect(currentTLS.caSecretAnnotations).To(HaveKey(secretManagedAnnotatoinKey), "should be marked as managed by the kube-admission-webhook cert-manager")
-			Expect(currentTLS.serviceSecretAnnotations).To(HaveKey(secretManagedAnnotatoinKey), "should be marked as managed by the kube-admission-webhook cert-manager")
+			Expect(currentTLS.caSecretAnnotations).To(HaveKey(secretManagedAnnotatoinKey),
+				"should be marked as managed by the kube-admission-webhook cert-manager")
+			Expect(currentTLS.serviceSecretAnnotations).To(HaveKey(secretManagedAnnotatoinKey),
+				"should be marked as managed by the kube-admission-webhook cert-manager")
 			Expect(currentResult.RequeueAfter).To(BeNumerically(">", time.Duration(0)), "should not be zero")
-			Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after first Reconcile to rotate service cert")
+			Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()),
+				"should schedule new Reconcile after first Reconcile to rotate service cert")
 		})
 		Context("and then called in the middle of service cert deadline", func() {
 			BeforeEach(func() {
 				backToTheFuture("Reconcile in the middle of service cert deadline", serviceCertDuration/2)
 			})
 			It("should not rotate service cert and return a reduced deadline", func() {
-				Expect(currentResult.RequeueAfter).To(BeNumerically("<", previousResult.RequeueAfter), "should subsctract 'now' from service cert deadline at reconcile in the middle of service certificate duration")
-				Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile rotate service cert")
+				Expect(currentResult.RequeueAfter).To(BeNumerically("<", previousResult.RequeueAfter),
+					"should subsctract 'now' from service cert deadline at reconcile in the middle of service certificate duration")
+				Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()),
+					"should schedule new Reconcile rotate service cert")
 				Expect(currentTLS).To(Equal(previousTLS), "should not change TLS cert/key on reconcile in the middle of certificate duration")
 			})
 
@@ -174,7 +180,8 @@ var _ = Describe("Certificates controller", func() {
 					Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
 					earliestElapsedForServiceCertsCleanup, err := mgr.earliestElapsedForServiceCertsCleanup()
 					Expect(err).ToNot(HaveOccurred())
-					Expect(currentResult.RequeueAfter).To(Equal(earliestElapsedForServiceCertsCleanup), "should schedule new Reconcile after service cert rotation to cleanup overlap")
+					Expect(currentResult.RequeueAfter).To(Equal(earliestElapsedForServiceCertsCleanup),
+						"should schedule new Reconcile after service cert rotation to cleanup overlap")
 
 					certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
 					Expect(err).To(Succeed(), "should succeed parsing service certificates")
@@ -192,7 +199,8 @@ var _ = Describe("Certificates controller", func() {
 						Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 						Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
 						Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
-						Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after service cert rotation to rotate service cert again")
+						Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()),
+							"should schedule new Reconcile after service cert rotation to rotate service cert again")
 
 						certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
 						Expect(err).To(Succeed(), "should succeed parsing service certificates")
@@ -206,14 +214,16 @@ var _ = Describe("Certificates controller", func() {
 						It("should rotate service cert/key and return a new deadline", func() {
 							Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
 							Expect(currentTLS.servicePrivateKey).ToNot(Equal(previousTLS.servicePrivateKey), "should have do a TLS key rotation")
-							Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations), "should containe same secret annotations")
+							Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations),
+								"should containe same secret annotations")
 							Expect(currentTLS.caBundle).To(Equal(previousTLS.caBundle), "shouldn't have rotate CABundle ")
 							Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 							Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
 							Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
 							earliestElapsedForServiceCertsCleanup, err := mgr.earliestElapsedForServiceCertsCleanup()
 							Expect(err).ToNot(HaveOccurred())
-							Expect(currentResult.RequeueAfter).To(Equal(earliestElapsedForServiceCertsCleanup), "should schedule new Reconcile after service cert rotation to cleanup overlap")
+							Expect(currentResult.RequeueAfter).To(Equal(earliestElapsedForServiceCertsCleanup),
+								"should schedule new Reconcile after service cert rotation to cleanup overlap")
 
 							certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
 							Expect(err).To(Succeed(), "should succeed parsing service certificates")
@@ -226,12 +236,14 @@ var _ = Describe("Certificates controller", func() {
 							It("should rotate service cert/key and return a new deadline", func() {
 								Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
 								Expect(currentTLS.servicePrivateKey).To(Equal(previousTLS.servicePrivateKey), "should have do a TLS key rotation")
-								Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations), "should containe same secret annotations")
+								Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations),
+									"should containe same secret annotations")
 								Expect(currentTLS.caBundle).To(Equal(previousTLS.caBundle), "shouldn't have rotate CABundle ")
 								Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 								Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
 								Expect(currentTLS.caSecretAnnotations).To(Equal(previousTLS.caSecretAnnotations), "should containe same secret annotations")
-								Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateCAFromLastDeadline()), "should schedule new Reconcile after service cert rotation to rotate CA cert")
+								Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateCAFromLastDeadline()),
+									"should schedule new Reconcile after service cert rotation to rotate CA cert")
 
 								certs, err := triple.ParseCertsPEM(currentTLS.serviceCertificate)
 								Expect(err).To(Succeed(), "should succeed parsing service certificates")
@@ -244,14 +256,16 @@ var _ = Describe("Certificates controller", func() {
 								It("should rotate CA and service certs and return new deadline", func() {
 									Expect(currentTLS.serviceCertificate).ToNot(Equal(previousTLS.serviceCertificate), "should have do TLS cert rotation")
 									Expect(currentTLS.servicePrivateKey).ToNot(Equal(previousTLS.servicePrivateKey), "should have do a TLS key rotation")
-									Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations), "should containe same secret annotations")
+									Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations),
+										"should containe same secret annotations")
 									Expect(currentTLS.caBundle).ToNot(Equal(previousTLS.caBundle), "should have rotate CABundle ")
 									Expect(currentTLS.caCertificate).ToNot(Equal(previousTLS.caCertificate), "should have rotate CA certificate")
 									Expect(currentTLS.caPrivateKey).ToNot(Equal(previousTLS.caPrivateKey), "should have rotate CA key rotation")
 
 									elapsedForCleanup, err := mgr.earliestElapsedForCACertsCleanup()
 									Expect(err).To(Succeed(), "should succeed calculating earliestElapsedForCACertsCleanup")
-									Expect(currentResult.RequeueAfter).To(Equal(elapsedForCleanup), "Reconcile at rotate should schedule next Reconcile to do the CA overlapping cleanup")
+									Expect(currentResult.RequeueAfter).To(Equal(elapsedForCleanup),
+										"Reconcile at rotate should schedule next Reconcile to do the CA overlapping cleanup")
 
 									cas, err := triple.ParseCertsPEM(currentTLS.caBundle)
 									Expect(err).To(Succeed(), "should succeed parssing caBundle")
@@ -265,14 +279,16 @@ var _ = Describe("Certificates controller", func() {
 										Expect(currentTLS.caBundle).ToNot(Equal(previousTLS.caBundle), "should have do a caBundle cleanup")
 										Expect(currentTLS.serviceCertificate).To(Equal(previousTLS.serviceCertificate), "should containe same TLS cert")
 										Expect(currentTLS.servicePrivateKey).To(Equal(previousTLS.servicePrivateKey), "should containe same TLS key")
-										Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations), "should containe same secret annotations")
+										Expect(currentTLS.serviceSecretAnnotations).To(Equal(previousTLS.serviceSecretAnnotations),
+											"should containe same secret annotations")
 										Expect(currentTLS.caCertificate).To(Equal(previousTLS.caCertificate), "shouldn't have rotate CA certificate")
 										Expect(currentTLS.caPrivateKey).To(Equal(previousTLS.caPrivateKey), "shouldn't have rotate CA key rotation")
 
 										cas, err := triple.ParseCertsPEM(currentTLS.caBundle)
 										Expect(err).To(Succeed(), "should succeed parssing caBundle")
 										Expect(cas).To(HaveLen(1), "should have cleandup CA bundle with expired certificates gone")
-										Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()), "should schedule new Reconcile after CA cleanup to rotate service cert")
+										Expect(currentResult.RequeueAfter).To(Equal(mgr.elapsedToRotateServicesFromLastDeadline()),
+											"should schedule new Reconcile after CA cleanup to rotate service cert")
 									})
 								})
 							})

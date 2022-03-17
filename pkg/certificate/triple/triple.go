@@ -48,7 +48,8 @@ func NewCA(name string, duration time.Duration) (*KeyPair, error) {
 	}, nil
 }
 
-func NewServerKeyPair(ca *KeyPair, commonName, svcName, svcNamespace, dnsDomain string, ips, hostnames []string, duration time.Duration) (*KeyPair, error) {
+func NewServerKeyPair(ca *KeyPair, commonName, svcName, svcNamespace,
+	dnsDomain string, ips, hostnames []string, duration time.Duration) (*KeyPair, error) {
 	key, err := NewPrivateKey()
 	if err != nil {
 		return nil, fmt.Errorf("unable to create a server private key: %v", err)

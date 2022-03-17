@@ -36,7 +36,8 @@ var _ = Describe("Cert library", func() {
 			Expect(caCert.Subject.CommonName).To(Equal(name), "should take CommonName from name field")
 			Expect(caCert.NotBefore).To(BeTemporally("~", now.UTC(), time.Second), "should set NotBefore to now")
 			Expect(caCert.NotAfter).To(BeTemporally("~", now.Add(duration).UTC(), time.Second), "should  set NotAfter to now + duration")
-			Expect(caCert.KeyUsage).To(Equal(x509.KeyUsageKeyEncipherment|x509.KeyUsageDigitalSignature|x509.KeyUsageCertSign), "should set proper KeyUsage")
+			Expect(caCert.KeyUsage).To(Equal(x509.KeyUsageKeyEncipherment|x509.KeyUsageDigitalSignature|x509.KeyUsageCertSign),
+				"should set proper KeyUsage")
 			Expect(caCert.BasicConstraintsValid).To(BeTrue(), "should mark it as BasicConstraintsValid")
 			Expect(caCert.IsCA).To(BeTrue(), "should mark it as CA")
 			Expect(caCert.SubjectKeyId).ToNot(BeEmpty(), "should include a SKI")

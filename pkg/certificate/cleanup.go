@@ -41,7 +41,8 @@ func (m *Manager) earliestElapsedForServiceCertsCleanup() (time.Duration, error)
 		if err != nil {
 			return time.Duration(0), fmt.Errorf("failed getting TLS keypair from service %s to calculate cleanup next run: %w", service, err)
 		}
-		elapsedTimeForCleanup, err := m.earliestElapsedForCleanup(m.log.WithName("earliestElapsedForServiceCertsCleanup").WithValues("service", service), certs)
+		elapsedTimeForCleanup, err := m.earliestElapsedForCleanup(
+			m.log.WithName("earliestElapsedForServiceCertsCleanup").WithValues("service", service), certs)
 		if err != nil {
 			return time.Duration(0), err
 		}
@@ -112,22 +113,23 @@ func (m *Manager) cleanUpServiceCerts() error {
 	}
 
 	for service := range services {
-		applyErr := m.applySecret(service, corev1.SecretTypeTLS, nil, func(secret *corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
-			certPEM, found := secret.Data[corev1.TLSCertKey]
-			if !found {
-				return nil, errors.Wrapf(err, "TLS cert not found at secret %s to clean up ", service)
-			}
+		applyErr := m.applySecret(service, corev1.SecretTypeTLS, nil,
+			func(secret *corev1.Secret, keyPair *triple.KeyPair) (*corev1.Secret, error) {
+				certPEM, found := secret.Data[corev1.TLSCertKey]
+				if !found {
+					return nil, errors.Wrapf(err, "TLS cert not found at secret %s to clean up ", service)
+				}
 
-			certs, err := triple.ParseCertsPEM(certPEM)
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed parsing TLS cert PEM at secret %s to clean up", service)
-			}
+				certs, err := triple.ParseCertsPEM(certPEM)
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed parsing TLS cert PEM at secret %s to clean up", service)
+				}
 
-			cleanedCerts := m.cleanUpCertificates(certs)
-			pem := triple.EncodeCertsPEM(cleanedCerts)
-			secret.Data[corev1.TLSCertKey] = pem
-			return secret, nil
-		})
+				cleanedCerts := m.cleanUpCertificates(certs)
+				pem := triple.EncodeCertsPEM(cleanedCerts)
+				secret.Data[corev1.TLSCertKey] = pem
+				return secret, nil
+			})
 		if applyErr != nil {
 			return applyErr
 		}

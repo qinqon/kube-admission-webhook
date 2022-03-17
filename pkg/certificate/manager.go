@@ -318,7 +318,8 @@ func (m *Manager) elapsedToRotateServicesFromLastDeadline() time.Duration {
 	}
 	now := m.now()
 	elapsedToRotate := deadline.Sub(now)
-	m.log.Info(fmt.Sprintf("elapsedToRotateServicesFromLastDeadline{now: %s, deadline: %s, elapsedToRotate: %s}", now, deadline, elapsedToRotate))
+	m.log.Info(fmt.Sprintf("elapsedToRotateServicesFromLastDeadline{now: %s, deadline: %s, elapsedToRotate: %s}",
+		now, deadline, elapsedToRotate))
 	return elapsedToRotate
 }
 

@@ -43,7 +43,8 @@ func (m *Manager) add(mgr manager.Manager) error {
 			return isAnnotatedResource(deleteEvent.Object) && m.isGeneratedSecret(deleteEvent.Object)
 		},
 		UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-			return m.isWebhookConfig(updateEvent.ObjectOld) || (isAnnotatedResource(updateEvent.ObjectOld) && m.isGeneratedSecret(updateEvent.ObjectOld))
+			return m.isWebhookConfig(updateEvent.ObjectOld) ||
+				(isAnnotatedResource(updateEvent.ObjectOld) && m.isGeneratedSecret(updateEvent.ObjectOld))
 		},
 		GenericFunc: func(genericEvent event.GenericEvent) bool {
 			return m.isWebhookConfig(genericEvent.Object) || (isAnnotatedResource(genericEvent.Object) && m.isGeneratedSecret(genericEvent.Object))
@@ -57,13 +58,15 @@ func (m *Manager) add(mgr manager.Manager) error {
 	}
 
 	logger.Info("Starting to watch validatingwebhookconfiguration")
-	err = c.Watch(&source.Kind{Type: &admissionregistrationv1.ValidatingWebhookConfiguration{}}, &handler.EnqueueRequestForObject{}, onEventForThisWebhook)
+	err = c.Watch(&source.Kind{Type: &admissionregistrationv1.ValidatingWebhookConfiguration{}},
+		&handler.EnqueueRequestForObject{}, onEventForThisWebhook)
 	if err != nil {
 		return errors.Wrap(err, "failed watching ValidatingWebhookConfiguration")
 	}
 
 	logger.Info("Starting to watch mutatingwebhookconfiguration")
-	err = c.Watch(&source.Kind{Type: &admissionregistrationv1.MutatingWebhookConfiguration{}}, &handler.EnqueueRequestForObject{}, onEventForThisWebhook)
+	err = c.Watch(&source.Kind{Type: &admissionregistrationv1.MutatingWebhookConfiguration{}},
+		&handler.EnqueueRequestForObject{}, onEventForThisWebhook)
 	if err != nil {
 		return errors.Wrap(err, "failed watching MutatingWebhookConfiguration")
 	}
@@ -202,7 +205,9 @@ func (m *Manager) Reconcile(ctx context.Context, request reconcile.Request) (rec
 
 	// Return the event that is going to happened sonner all services certificates rotation,
 	// services certificate rotation or ca bundle cleanup
-	m.log.Info("Calculating RequeueAfter", "elapsedToRotateCA", elapsedToRotateCA, "elapsedToRotateServices", elapsedToRotateServices, "elapsedForCABundleCleanup", elapsedForCABundleCleanup, "elapsedForServiceCertsCleanup", elapsedForServiceCertsCleanup)
+	m.log.Info("Calculating RequeueAfter", "elapsedToRotateCA", elapsedToRotateCA,
+		"elapsedToRotateServices", elapsedToRotateServices, "elapsedForCABundleCleanup",
+		elapsedForCABundleCleanup, "elapsedForServiceCertsCleanup", elapsedForServiceCertsCleanup)
 	requeueAfter := min(elapsedToRotateCA, elapsedToRotateServices, elapsedForCABundleCleanup, elapsedForServiceCertsCleanup)
 
 	m.log.Info(fmt.Sprintf("Certificates will be Reconcile on %s", m.now().Add(requeueAfter)))

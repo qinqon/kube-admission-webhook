@@ -44,7 +44,8 @@ var _ = Describe("certificate manager", func() {
 
 			deadline := m.nextRotationDeadlineForCert(caCert, c.overlap)
 
-			Expect(deadline).To(Equal(lowerBound), fmt.Sprintf("should match deadline for notBefore %v, notAfter %v and overlap %v", notBefore, notAfter, c.overlap))
+			Expect(deadline).To(Equal(lowerBound),
+				fmt.Sprintf("should match deadline for notBefore %v, notAfter %v and overlap %v", notBefore, notAfter, c.overlap))
 
 		},
 		Entry("just issued, still good", nextRotationDeadlineForCertCase{
@@ -172,7 +173,8 @@ var _ = Describe("certificate manager", func() {
 		return obtainedMutatingWebhookConfiguration
 	}
 
-	updateMutatingWebhook := func(manager *Manager, mutatingWebhookConfigurationToUpdate *admissionregistrationv1.MutatingWebhookConfiguration) {
+	updateMutatingWebhook := func(manager *Manager,
+		mutatingWebhookConfigurationToUpdate *admissionregistrationv1.MutatingWebhookConfiguration) {
 		err := manager.client.Update(context.TODO(), mutatingWebhookConfigurationToUpdate)
 		ExpectWithOffset(1, err).To(Succeed(), "should success updating mutatingwebhookconfiguration")
 	}
