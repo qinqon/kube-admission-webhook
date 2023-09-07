@@ -85,15 +85,17 @@ type Manager struct {
 // It will also starts at cert manager [1] that will update them if they expire.
 // The generate certificate include the following fields:
 // DNSNames (for every service the webhook refers too):
-//	   - ${service.Name}
-//	   - ${service.Name}.${service.namespace}
-//	   - ${service.Name}.${service.namespace}.svc
+//   - ${service.Name}
+//   - ${service.Name}.${service.namespace}
+//   - ${service.Name}.${service.namespace}.svc
+//
 // Subject:
-// 	  - CN: ${webhookName}
+//   - CN: ${webhookName}
+//
 // Usages:
-//	   - UsageDigitalSignature
-//	   - UsageKeyEncipherment
-//	   - UsageServerAuth
+//   - UsageDigitalSignature
+//   - UsageKeyEncipherment
+//   - UsageServerAuth
 //
 // It will also update the webhook caBundle field with the cluster CA cert and
 // approve the generated cert/key with k8s certification approval mechanism
