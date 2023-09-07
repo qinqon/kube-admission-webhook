@@ -19,7 +19,7 @@ package webhook_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 
@@ -123,7 +123,7 @@ var _ = Describe("Webhook Server", func() {
 				resp, err := client.Get(fmt.Sprintf("https://%s/somepath", testHostPort))
 				Expect(err).NotTo(HaveOccurred())
 				defer resp.Body.Close()
-				return ioutil.ReadAll(resp.Body)
+				return io.ReadAll(resp.Body)
 			}).Should(Equal([]byte("gadzooks!")))
 
 			Expect(server.StartedChecker()(nil)).To(Succeed())
@@ -163,7 +163,7 @@ var _ = Describe("Webhook Server", func() {
 			Expect(err).NotTo(HaveOccurred())
 			defer resp.Body.Close()
 
-			Expect(ioutil.ReadAll(resp.Body)).To(Equal([]byte("gadzooks!")))
+			Expect(io.ReadAll(resp.Body)).To(Equal([]byte("gadzooks!")))
 		})
 
 		It("should inject dependencies, if an inject func has been provided already", func() {
@@ -188,7 +188,7 @@ var _ = Describe("Webhook Server", func() {
 			resp, err := client.Get(fmt.Sprintf("https://%s/somepath", testHostPort))
 			Expect(err).NotTo(HaveOccurred())
 			defer resp.Body.Close()
-			return ioutil.ReadAll(resp.Body)
+			return io.ReadAll(resp.Body)
 		}).Should(Equal([]byte("gadzooks!")))
 
 		ctxCancel()

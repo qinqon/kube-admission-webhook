@@ -59,7 +59,7 @@ var (
 	}()
 )
 
-func init() { // nolint:gochecknoinits
+func init() { //nolint:gochecknoinits
 	metrics.Registry.MustRegister(RequestLatency, RequestTotal, RequestInFlight)
 }
 
