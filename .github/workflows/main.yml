@@ -17,10 +17,8 @@ jobs:
       uses: actions/setup-go@v1
       with:
         go-version: ${{ steps.go-version.outputs.minimal }}
-    - name: golangci-lint
-      uses: golangci/golangci-lint-action@v2
-      with:
-          version: v1.42.1
+    - name: Run lint
+      run: make lint
   build:
     runs-on: ubuntu-latest
     steps:

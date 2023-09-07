@@ -1,8 +1,7 @@
 #!/bin/bash -xe
 
-golangci_lint_version=v1.42.1
-if [ ! -f $(go env GOPATH)/bin/golangci-lint ]; then
-    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin $golangci_lint_version
-fi
-golangci-lint run
+version=v1.42.1
+timeout=5m
+
+go run github.com/golangci/golangci-lint/cmd/golangci-lint@$version run --timeout $timeout
 
