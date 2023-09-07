@@ -1,6 +1,6 @@
 module github.com/qinqon/kube-admission-webhook
 
-go 1.17
+go 1.19
 
 require (
 	github.com/github-release/github-release v0.10.0

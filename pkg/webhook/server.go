@@ -21,7 +21,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -295,7 +294,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if s.ClientCAName != "" {
 		certPool := x509.NewCertPool()
 		var clientCABytes []byte
-		clientCABytes, err = ioutil.ReadFile(filepath.Join(s.CertDir, s.ClientCAName))
+		clientCABytes, err = os.ReadFile(filepath.Join(s.CertDir, s.ClientCAName))
 		if err != nil {
 			return fmt.Errorf("failed to read client CA cert: %v", err)
 		}
@@ -346,7 +345,7 @@ func (s *Server) Start(ctx context.Context) error {
 // server has been started.
 func (s *Server) StartedChecker() healthz.Checker {
 	config := &tls.Config{
-		InsecureSkipVerify: true, // nolint:gosec // config is used to connect to our own webhook port.
+		InsecureSkipVerify: true, //nolint:gosec // config is used to connect to our own webhook port.
 	}
 	return func(req *http.Request) error {
 		s.mu.Lock()

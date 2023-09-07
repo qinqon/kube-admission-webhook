@@ -10,24 +10,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Check out code
-      uses: actions/checkout@v2
-    - uses: arnested/go-version-action@v1
-      id: go-version
+      uses: actions/checkout@v3
     - name: Set up Go
-      uses: actions/setup-go@v1
+      uses: actions/setup-go@v4
       with:
-        go-version: ${{ steps.go-version.outputs.minimal }}
+        go-version-file: "go.mod"
     - name: Run lint
       run: make lint
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: arnested/go-version-action@v1
-      id: go-version
-    - name: Install Go ${{ steps.go-version.outputs.minimal }}
-      uses: actions/setup-go@v2
+    - name: Check out code
+      uses: actions/checkout@v3
+    - name: Set up Go
+      uses: actions/setup-go@v4
       with:
-        go-version: ${{ steps.go-version.outputs.minimal }}
+        go-version-file: "go.mod"
     - name: Run unit test
       run: make test
